@@ -1,0 +1,39 @@
+{
+  "name": "DiagAuto Pro — Diagnostic Ingénieur",
+  "short_name": "DiagAuto",
+  "description": "Diagnostic automobile IA locale, ELM, atelier, sécurité, fond admin, PWA/APK.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "orientation": "any",
+  "lang": "fr-FR",
+  "dir": "ltr",
+  "categories": ["automotive", "utilities", "productivity"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Diagnostic", "short_name": "Diag", "url": "/?tab=diag" },
+    { "name": "Accès tiers", "short_name": "Accès", "url": "/?tab=access" },
+    { "name": "Atelier", "short_name": "Atelier", "url": "/?tab=workshop" },
+    { "name": "ELM", "short_name": "ELM", "url": "/?tab=elm" },
+    { "name": "Admin", "short_name": "Admin", "url": "/?tab=admin" },
+    { "name": "Mise à jour", "short_name": "MAJ", "url": "/?tab=update" }
+  ],
+  "share_target": {
+    "action": "/?share=true",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
+  "protocol_handlers": [
+    { "protocol": "web+diagauto", "url": "/?link=%s" }
+  ]
+}
