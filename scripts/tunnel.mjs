@@ -69,29 +69,21 @@ Options :
   --verify                   Lance scripts/auto-verify.mjs en mode PWABuilder contre l'URL HTTPS.
   --open                     Ouvre PWABuilder dans le navigateur avec l'URL du tunnel.
   --force-open               Ouvre PWABuilder même si la vérification échoue.
-  --once                     Arrête le tunnel après la vérification. Utile en CI/test rapide.
+  --once                     Arrête le tunnel après la vérification.
   --raw                      Affiche la sortie brute de cloudflared.
   --quiet                    Réduit les logs non essentiels.
   --strict                   Passe --strict à auto-verify.mjs.
-  --insecure                 Passe --insecure à auto-verify.mjs pour certificats auto-signés.
-  --no-verify                Désactive la vérification même si le script npm l'ajoute.
-  --no-open                  Désactive l'ouverture navigateur même si le script npm l'ajoute.
+  --insecure                 Passe --insecure à auto-verify.mjs.
+  --no-verify                Désactive la vérification.
+  --no-open                  Désactive l'ouverture navigateur.
   --port <port>              Port du serveur local. Défaut : 3000 ou PORT.
   --timeout <ms>             Timeout d'attente de l'URL Cloudflare. Défaut : 60000.
   --server-timeout <ms>      Timeout d'attente du serveur local. Défaut : 20000.
   --local-host <host>        Hôte local à tuner. Défaut : 127.0.0.1.
-  --local-url <url>          URL locale complète. Défaut : http://127.0.0.1:<port>.
+  --local-url <url>          URL locale complète.
   --cloudflared-bin <path>   Chemin explicite vers cloudflared.
   --url-file <path>          Écrit l'URL publique HTTPS dans un fichier.
   --help, -h                 Affiche cette aide.
-
-Exemples npm :
-  npm run tunnel
-  npm run tunnel:verify
-  npm run pwabuilder
-  npm run pwabuilder -- --start
-  npm run pwabuilder -- --start --verify --open
-  npm run tunnel -- --verify --once --url-file tunnel-url.txt --quiet
 `);
 }
 
@@ -183,7 +175,7 @@ function requestUrl(target, timeout = 5000) {
       {
         timeout,
         headers: {
-          'User-Agent': 'DiagAutoPro-Tunnel/4.2.1',
+          'User-Agent': 'DiagAutoPro-Tunnel/4.3.0',
           Accept: '*/*'
         }
       },
@@ -245,7 +237,7 @@ async function waitForServer() {
           return;
         }
       } catch {
-        // health endpoint pas en JSON valide, on tente la page d'accueil
+        // fallback page accueil
       }
     }
 
