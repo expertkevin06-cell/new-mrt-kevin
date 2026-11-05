@@ -1085,40 +1085,72 @@ app.post('/api/workshop/push', auth(true), (req, res) => {
   res.json({ success: true, applied, server_time: now() });
 });
 
-app.get('/api/elm/profiles', auth(true), (req, res) => res.json(db.elm_profiles));
+app.get('/api/elm/profiles', auth(true), (req, res) => {
+  try {
+    const profiles = sanitizeElmProfilesForClient(loadElmProfiles());
+    res.json(profiles);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/elm/summary', auth(true), (req, res) => {
+  try {
+    res.json(getElmProfileSummary());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/elm/profiles', requireOwner, (req, res) => {
-  const profiles = req.body || {};
-  if (typeof profiles !== 'object' || Array.isArray(profiles)) return res.status(400).json({ error: 'Objet de profils attendu' });
-  db.elm_profiles = profiles;
-  saveDb();
-  logAudit({ deviceId: req.auth.deviceId, actor: 'owner', action: 'elm_profiles_updated' });
-  res.json({ success: true, profiles: db.elm_profiles });
+  try {
+    const saved = saveElmProfiles(req.body || {});
+    logAudit({
+      deviceId: req.auth.deviceId,
+      actor: 'owner',
+      action: 'elm_profiles_updated',
+      details: { version: saved.version, ecu_groups: saved.ecu_groups?.length || 0 }
+    });
+    res.json({ success: true, profiles: sanitizeElmProfilesForClient(saved) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.post('/api/elm/log', auth(true), (req, res) => {
-  const { action, command, response, ok } = req.body || {};
-  const rec = {
-    id: uid(),
-    ts: now(),
-    deviceId: req.auth.deviceId,
-    actor: req.auth.role,
-    action: action || 'elm_command',
-    command: String(command || '').slice(0, 500),
-    response: String(response || '').slice(0, 2000),
-    ok: ok !== false
-  };
-  db.elm_logs.unshift(rec);
-  db.elm_logs = db.elm_logs.slice(0, 1000);
-  saveDb();
-  res.json({ success: true, log: rec });
+  try {
+    const { action, command, response, ok, meta } = req.body || {};
+    const record = appendElmLog({
+      deviceId: req.auth.deviceId,
+      actor: req.auth.role,
+      action: action || 'elm_command',
+      command,
+      response,
+      ok,
+      meta
+    });
+
+    logAudit({
+      deviceId: req.auth.deviceId,
+      actor: req.auth.role,
+      action: 'elm_log',
+      details: { logAction: record.action, ok: record.ok }
+    });
+
+    res.json({ success: true, log: record });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/elm/logs', requireOwner, (req, res) => {
-  const limit = Math.min(Number(req.query.limit || 200), 1000);
-  res.json(db.elm_logs.slice(0, limit));
+  try {
+    const limit = Math.min(Number(req.query.limit || 200), 2000);
+    res.json(getElmLogs(limit));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
-
 app.post('/api/import/trigger', requireOwner, async (req, res) => {
   try {
     logAudit({ deviceId: req.auth.deviceId, actor: 'owner', action: 'import_trigger' });
