@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>DiagAuto Pro</title>
+  <meta name="theme-color" content="#1e40af" />
+  <meta name="description" content="Diagnostic automobile IA locale, ELM, atelier, sécurité, PWA/APK." />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="wallpaper">
+    <img id="wallpaperImg" alt="" />
+    <video id="wallpaperVideo" muted playsinline loop autoplay></video>
+    <div id="wallpaperOverlay"></div>
+  </div>
+
+  <div class="header">
+    <div class="brand">
+      <h1>🚗 DiagAuto Pro</h1>
+      <small>IA locale • ELM 6D • Atelier • Sécurité • Fond admin • PWA/APK</small>
+    </div>
+    <div id="netStatus" class="badge offline">🔴 Hors ligne</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="diag">🔍 Diagnostic</div>
+    <div class="tab" data-tab="access">🔐 Accès</div>
+    <div class="tab" data-tab="workshop">🧰 Atelier</div>
+    <div class="tab" data-tab="elm">📡 ELM</div>
+    <div class="tab" data-tab="admin">🛡️ Admin</div>
+    <div class="tab" data-tab="update">🔄 MAJ</div>
+  </div>
+
+  <main>
+    <section id="panel-diag" class="panel">
+      <div class="card">
+        <h2>🔍 Recherche automatique de pannes</h2>
+        <div class="grid">
+          <div class="field"><label for="brandSelect">Marque</label><select id="brandSelect"><option value="">Toutes marques</option></select></div>
+          <div class="field"><label for="modelSelect">Modèle</label><select id="modelSelect"><option value="">Tous modèles</option></select></div>
+          <div class="field"><label for="engineSelect">Motorisation</label><select id="engineSelect"><option value="">Toutes motorisations</option></select></div>
+          <div class="field"><label for="powerMin">Puissance min (ch)</label><input id="powerMin" type="number" min="0" placeholder="Ex : 90" /></div>
+          <div class="field"><label for="powerMax">Puissance max (ch)</label><input id="powerMax" type="number" min="0" placeholder="Ex : 250" /></div>
+          <div class="field"><label for="dtcInput">Code DTC</label><input id="dtcInput" placeholder="Ex : P0300" /></div>
+          <div class="field" style="grid-column:1/-1;"><label for="symptomInput">Symptôme</label><input id="symptomInput" placeholder="Ex : moteur broute, ne démarre pas, fumée noire" /></div>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button id="searchBtn" class="btn btn-primary">Lancer le diagnostic</button>
+          <button id="resetBtn" class="btn btn-outline">Réinitialiser</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🧠 Analyse symptôme</h2>
+        <div id="symptomAnalysis" class="muted">Aucune analyse.</div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Résultats base DTC</h2>
+        <div id="results" class="results"><div class="muted">Aucune recherche lancée.</div></div>
+      </div>
+
+      <div id="aiPanel" class="ai-panel"></div>
+    </section>
+
+    <section id="panel-access" class="panel hidden">
+      <div class="card">
+        <h2>🔐 Contrôle d'accès</h2>
+        <div id="accessStatus" class="muted small">Statut : vérification...</div>
+
+        <div id="guestArea" class="hidden" style="margin-top:14px;">
+          <div class="field"><label for="requesterName">Votre prénom</label><input id="requesterName" placeholder="Ex : Karim" /></div>
+          <button id="requestAccessBtn" class="btn btn-primary btn-block">Demander l'accès</button>
+        </div>
+
+        <div id="pendingArea" class="hidden" style="margin-top:14px;">
+          <div class="muted">⏳ Demande envoyée. En attente de validation.</div>
+          <button id="refreshAccessBtn" class="btn btn-outline" style="margin-top:10px;">Actualiser le statut</button>
+        </div>
+
+        <div id="ownerArea" class="hidden" style="margin-top:14px;">
+          <div class="row">
+            <button id="refreshRequestsBtn" class="btn btn-outline">Actualiser les demandes</button>
+            <button id="logoutBtn" class="btn btn-danger">Quitter mode propriétaire</button>
+          </div>
+          <h2 style="margin-top:18px;">📥 Demandes tierces</h2>
+          <div id="requestsList"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>👤 Connexion propriétaire</h2>
+        <div class="field"><label for="ownerCode">Code propriétaire</label><input id="ownerCode" type="password" placeholder="Code secret" /></div>
+        <button id="ownerLoginBtn" class="btn btn-success">Activer le mode propriétaire</button>
+      </div>
+    </section>
+
+    <section id="panel-workshop" class="panel hidden">
+      <div class="card">
+        <h2>🧰 Profil atelier</h2>
+        <div class="field"><label for="workshopProfileName">Nom de l'atelier / technicien</label><input id="workshopProfileName" placeholder="Ex : Garage Central" /></div>
+        <button id="saveProfileBtn" class="btn btn-primary">Enregistrer le profil</button>
+      </div>
+
+      <div class="card">
+        <h2>🚘 Fiche véhicule</h2>
+        <div class="grid">
+          <div class="field"><label for="vehiclePlate">Immatriculation</label><input id="vehiclePlate" placeholder="AA-123-BB" /></div>
+          <div class="field"><label for="vehicleVin">VIN</label><input id="vehicleVin" placeholder="Numéro de série" /></div>
+          <div class="field"><label for="workshopBrandSelect">Marque</label><select id="workshopBrandSelect"><option value="">Choisir</option></select></div>
+          <div class="field"><label for="workshopModelSelect">Modèle</label><select id="workshopModelSelect"><option value="">Choisir</option></select></div>
+          <div class="field"><label for="vehicleYear">Année</label><input id="vehicleYear" placeholder="2021" /></div>
+          <div class="field"><label for="vehicleOdometer">Kilométrage</label><input id="vehicleOdometer" type="number" min="0" placeholder="85000" /></div>
+          <div class="field"><label for="vehicleCustomer">Client</label><input id="vehicleCustomer" placeholder="Nom du client" /></div>
+          <div class="field"><label for="vehiclePhone">Téléphone</label><input id="vehiclePhone" placeholder="06..." /></div>
+          <div class="field" style="grid-column:1/-1;"><label for="vehicleNotes">Notes</label><input id="vehicleNotes" placeholder="Observations" /></div>
+        </div>
+        <button id="saveVehicleBtn" class="btn btn-primary" style="margin-top:12px;">Enregistrer le véhicule</button>
+      </div>
+
+      <div class="card">
+        <h2>🛠️ Intervention</h2>
+        <div class="grid">
+          <div class="field"><label for="interventionVehicleSelect">Véhicule</label><select id="interventionVehicleSelect"><option value="">Choisir</option></select></div>
+          <div class="field"><label for="interventionTitle">Intitulé</label><input id="interventionTitle" placeholder="Ex : Remplacement bobines" /></div>
+          <div class="field" style="grid-column:1/-1;"><label for="interventionDiagnosis">Diagnostic / travaux</label><input id="interventionDiagnosis" placeholder="Description technique" /></div>
+          <div class="field"><label for="interventionParts">Pièces</label><input id="interventionParts" placeholder="Pièces utilisées" /></div>
+          <div class="field"><label for="interventionLabor">Main d'œuvre</label><input id="interventionLabor" placeholder="Temps, opérations" /></div>
+          <div class="field"><label for="interventionCost">Coût (€)</label><input id="interventionCost" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+          <div class="field"><label for="interventionTechnician">Technicien</label><input id="interventionTechnician" placeholder="Nom" /></div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button id="saveInterventionBtn" class="btn btn-primary">Enregistrer l'intervention</button>
+          <button id="syncWorkshopBtn" class="btn btn-outline">Synchroniser l'atelier</button>
+        </div>
+        <div id="workshopSyncStatus" class="muted small" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>📚 Historique</h2>
+        <div id="vehicleList" class="list"></div>
+        <h2 style="margin-top:18px;">🧾 Interventions récentes</h2>
+        <div id="interventionList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h2>📤 Rapport, export et partage</h2>
+        <div class="field"><label for="reportVehicleSelect">Véhicule pour rapport</label><select id="reportVehicleSelect"><option value="">Choisir</option></select></div>
+        <div class="row" style="margin-top:12px;">
+          <button id="generateReportBtn" class="btn btn-primary">Générer rapport PDF</button>
+          <button id="exportZipBtn" class="btn btn-outline">Exporter ZIP atelier</button>
+          <button id="shareSummaryBtn" class="btn btn-outline">Partager synthèse</button>
+        </div>
+        <div id="workshopStatus" class="muted small" style="margin-top:10px;"></div>
+      </div>
+    </section>
+
+    <section id="panel-elm" class="panel hidden">
+      <div class="card">
+        <h2>📡 Connexion ELM327 / OBD</h2>
+        <div class="grid">
+          <div class="field"><label for="elmTransportSelect">Transport</label>
+            <select id="elmTransportSelect">
+              <option value="demo">Démo simulée</option>
+              <option value="ble">Bluetooth Web (BLE)</option>
+              <option value="capbt">Bluetooth natif Capacitor</option>
+              <option value="serial">Web Serial USB</option>
+              <option value="manual">Manuel / console</option>
+            </select>
+          </div>
+          <div class="field"><label for="elmMacInput">Adresse / MAC si connu</label><input id="elmMacInput" placeholder="ex: 00:11:22:33:44:55" /></div>
+          <div class="field"><label for="elmBaudInput">Baudrate USB</label><input id="elmBaudInput" type="number" value="38400" /></div>
+        </div>
+        <div class="row">
+          <button id="elmConnectBtn" class="btn btn-primary">Connecter</button>
+          <button id="elmDisconnectBtn" class="btn btn-danger">Déconnecter</button>
+          <button id="elmScanBtn" class="btn btn-outline">Scanner appareils</button>
+        </div>
+        <div id="elmStatus" class="muted small" style="margin-top:10px;">Déconnecté.</div>
+        <div id="elmDeviceList" class="list" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>🚗 Identification véhicule</h2>
+        <div class="row">
+          <button id="elmReadVinBtn" class="btn btn-primary">Lire VIN</button>
+          <button id="elmReadMileageBtn" class="btn btn-outline">Lire kilométrage</button>
+          <button id="elmReadDtcBtn" class="btn btn-outline">Lire DTC</button>
+          <button id="elmClearDtcBtn" class="btn btn-danger">Effacer DTC</button>
+          <button id="elmReadinessBtn" class="btn btn-outline">Readiness monitors</button>
+        </div>
+        <div id="elmVehicleInfo" class="kv" style="margin-top:12px;"></div>
+        <div id="elmDtcResults" class="results" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>📈 Live data</h2>
+        <div class="row">
+          <button id="elmLiveStartBtn" class="btn btn-primary">Démarrer</button>
+          <button id="elmLiveStopBtn" class="btn btn-danger">Arrêter</button>
+        </div>
+        <div id="elmLiveData" class="grid" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>💻 Calculateurs / ECUs</h2>
+        <div class="field"><label for="elmEcuProfileSelect">Profil ECU</label><select id="elmEcuProfileSelect"></select></div>
+        <button id="elmIdentifyBtn" class="btn btn-primary">Identifier ECUs</button>
+        <div id="elmEcuResults" class="results" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card" id="elmCalibCard">
+        <h2>⚙️ Calibrage / apprentissages / routines UDS</h2>
+        <div class="muted small">
+          Réservé propriétaire/admin. Les routines constructeur exactes doivent être renseignées dans les profils.
+          Une erreur de routine peut endommager un calculateur ou désactiver un système de sécurité.
+        </div>
+        <div class="grid" style="margin-top:10px;">
+          <div class="field"><label for="elmCalibProfileSelect">Profil</label><select id="elmCalibProfileSelect"></select></div>
+          <div class="field"><label for="elmCalibAddress">Adresse ECU hex</label><input id="elmCalibAddress" placeholder="7E0" /></div>
+          <div class="field"><label for="elmCalibService">Service / routine</label><input id="elmCalibService" placeholder="3101 ou 22 ou 2E" /></div>
+          <div class="field"><label for="elmCalibData">Données hex</label><input id="elmCalibData" placeholder="ex: 00 01 02" /></div>
+          <div class="field"><label for="elmCalibSecurityKey">Clé sécurité (optionnel)</label><input id="elmCalibSecurityKey" placeholder="ne pas partager de clé OEM sensible" /></div>
+        </div>
+        <button id="elmRunCalibBtn" class="btn btn-danger">Envoyer routine UDS</button>
+        <div id="elmCalibResult" class="muted small" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>🧪 Console brute</h2>
+        <div class="field"><label for="elmRawCmd">Commande ELM / UDS</label><input id="elmRawCmd" placeholder="ex: 010C, 0902, 6A F1 90" /></div>
+        <button id="elmRawSendBtn" class="btn btn-primary">Envoyer</button>
+        <pre id="elmConsole" class="console"></pre>
+        <h3 style="margin-top:14px;">Journal</h3>
+        <div id="elmLogs" class="list"></div>
+      </div>
+    </section>
+
+    <section id="panel-admin" class="panel hidden">
+      <div class="card">
+        <h2>️ Fond d’écran admin</h2>
+        <div class="grid">
+          <div class="field"><label for="wallpaperEnabled">Activer</label><select id="wallpaperEnabled"><option value="true">Oui</option><option value="false">Non</option></select></div>
+          <div class="field"><label for="wallpaperType">Type</label><select id="wallpaperType"><option value="image">Image</option><option value="video">Vidéo</option></select></div>
+          <div class="field"><label for="wallpaperFit">Fit</label><select id="wallpaperFit"><option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option></select></div>
+          <div class="field"><label for="wallpaperOpacity">Opacité</label><input id="wallpaperOpacity" type="range" min="0" max="1" step="0.01" value="0.22" /></div>
+          <div class="field"><label for="wallpaperBlur">Flou (px)</label><input id="wallpaperBlur" type="range" min="0" max="30" step="1" value="0" /></div>
+          <div class="field"><label for="wallpaperOverlay">Assombrissement</label><input id="wallpaperOverlay" type="range" min="0" max="1" step="0.01" value="0.45" /></div>
+          <div class="field"><label for="wallpaperApplyGuests">Appliquer aux tiers / APK</label><select id="wallpaperApplyGuests"><option value="true">Oui</option><option value="false">Non</option></select></div>
+          <div class="field" style="grid-column:1/-1;"><label for="wallpaperFile">Fichier image/vidéo</label><input id="wallpaperFile" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" /></div>
+          <div class="field" style="grid-column:1/-1;"><label for="wallpaperUrlInput">Ou URL personnalisée</label><input id="wallpaperUrlInput" placeholder="https://.../background.jpg" /></div>
+        </div>
+        <button id="saveWallpaperBtn" class="btn btn-primary">Enregistrer le fond d’écran</button>
+        <div id="wallpaperPreview" class="muted small" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2> PIN local & chiffrement</h2>
+        <div class="kv"><div class="muted">Chiffrement local</div><div id="encStatus">—</div></div>
+
+        <div id="pinSetupArea">
+          <div class="grid">
+            <div class="field"><label for="pinSet1">Nouveau PIN</label><input id="pinSet1" type="password" placeholder="Au moins 4 chiffres" /></div>
+            <div class="field"><label for="pinSet2">Confirmer PIN</label><input id="pinSet2" type="password" /></div>
+          </div>
+          <button id="setPinBtn" class="btn btn-primary">Activer PIN et chiffrer</button>
+        </div>
+
+        <div id="pinManagedArea" class="hidden">
+          <div class="grid">
+            <div class="field"><label for="changePinOld">PIN actuel</label><input id="changePinOld" type="password" /></div>
+            <div class="field"><label for="changePinNew">Nouveau PIN</label><input id="changePinNew" type="password" /></div>
+            <div class="field"><label for="disablePinCurrent">PIN pour désactiver</label><input id="disablePinCurrent" type="password" /></div>
+          </div>
+          <div class="row">
+            <button id="changePinBtn" class="btn btn-primary">Changer PIN</button>
+            <button id="disablePinBtn" class="btn btn-danger">Désactiver PIN</button>
+            <button id="lockAppBtn" class="btn btn-warning">Verrouiller</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🧾 Sauvegarde chiffrée</h2>
+        <div class="grid">
+          <div class="field"><label for="exportBackupPassword">Mot de passe export</label><input id="exportBackupPassword" type="password" placeholder="Min. 6 caractères" /></div>
+          <div class="field"><label for="importBackupPassword">Mot de passe import</label><input id="importBackupPassword" type="password" /></div>
+          <div class="field" style="grid-column:1/-1;"><label for="importBackupFile">Fichier .diagauto</label><input id="importBackupFile" type="file" accept=".diagauto,application/json" /></div>
+        </div>
+        <div class="row">
+          <button id="exportBackupBtn" class="btn btn-primary">Exporter base chiffrée</button>
+          <button id="importBackupBtn" class="btn btn-outline">Importer base chiffrée</button>
+        </div>
+        <div id="backupStatus" class="muted small" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>🚫 Révocation signée</h2>
+        <div class="kv">
+          <div class="muted">Liste de révocation</div><div id="revocationStatus">—</div>
+        </div>
+        <button id="refreshRevocationsBtn" class="btn btn-outline">Actualiser la liste signée</button>
+        <div id="revocationDetails" class="muted small" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>📜 Audit</h2>
+        <div class="row">
+          <button id="loadLocalAuditBtn" class="btn btn-outline">Audit local</button>
+          <button id="loadServerAuditBtn" class="btn btn-outline">Audit serveur</button>
+        </div>
+        <h3 style="margin-top:14px;">Local</h3>
+        <div id="localAuditList" class="list"></div>
+        <h3 style="margin-top:14px;">Serveur</h3>
+        <div id="serverAuditList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h2>🌐 URL backend pour APK natif</h2>
+        <div class="field"><label for="apiBaseInput">URL backend</label><input id="apiBaseInput" placeholder="https://api.monserveur.com" /></div>
+        <button id="saveApiBaseBtn" class="btn btn-primary">Enregistrer l’URL backend</button>
+        <button id="ownerImportBtn" class="btn btn-danger hidden">Relancer import serveur</button>
+        <div id="adminStatus" class="muted small" style="margin-top:10px;"></div>
+      </div>
+    </section>
+
+    <section id="panel-update" class="panel hidden">
+      <div class="card">
+        <h2>🔄 Mise à jour</h2>
+        <div class="kv">
+          <div class="muted">Version app</div><div id="appVersion">—</div>
+          <div class="muted">Version données</div><div id="dataVersion">—</div>
+          <div class="muted">Dernière sync</div><div id="lastSync">—</div>
+          <div class="muted">Réseau</div><div id="networkDetail">—</div>
+        </div>
+        <div class="row" style="margin-top:16px;">
+          <button id="checkAppUpdateBtn" class="btn btn-primary">Mettre à jour PWA</button>
+          <button id="checkDataUpdateBtn" class="btn btn-outline">Vérifier données</button>
+          <button id="forceFullUpdateBtn" class="btn btn-warning">Forcer mise à jour complète</button>
+        </div>
+        <div id="updateLog" class="muted small" style="margin-top:14px;"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="lockOverlay" class="lock-overlay hidden">
+    <div class="lock-card">
+      <h2>🔒 Accès verrouillé</h2>
+      <p class="muted small">Demandez un accès tiers avec votre prénom ou connectez-vous en propriétaire.</p>
+      <div class="row" style="margin-top:14px;">
+        <button id="goAccessBtn" class="btn btn-primary">Demander un accès</button>
+        <button id="goOwnerBtn" class="btn btn-outline">Connexion propriétaire</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pinOverlay" class="lock-overlay hidden">
+    <div class="lock-card">
+      <h2>🔐 Déverrouillage local</h2>
+      <p class="muted small">La base locale est chiffrée. Entrez votre PIN.</p>
+      <div class="field" style="margin-top:14px;"><label for="pinInput">PIN</label><input id="pinInput" type="password" inputmode="numeric" autofocus /></div>
+      <button id="pinUnlockBtn" class="btn btn-primary btn-block">Déverrouiller</button>
+      <div id="pinStatus" class="muted small" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="toastHost" class="toast-host"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
