@@ -1,34 +1,58 @@
 {
   "name": "diagauto-pro",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "private": true,
+  "description": "DiagAuto Pro — PWA/APK de diagnostic automobile avec IA locale, atelier, sécurité, fond d'écran admin, ELM/UDS avancé et vérification production.",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
   },
   "scripts": {
+    "setup": "npm install && npm run icons",
     "icons": "node scripts/generate-icons.mjs",
     "start": "npm run icons && node server/index.js",
     "dev": "node --watch server/index.js",
+
     "verify": "node scripts/auto-verify.mjs",
     "verify:live": "node scripts/auto-verify.mjs --live --base http://localhost:3000",
     "verify:prod": "node scripts/auto-verify.mjs --live --pwabuilder --strict",
     "pwabuilder:check": "node scripts/auto-verify.mjs --live --pwabuilder --strict",
-    "tunnel": "npx --yes cloudflared tunnel --url http://localhost:3000",
+
+    "tunnel": "node scripts/tunnel.mjs",
+    "tunnel:verify": "node scripts/tunnel.mjs --verify",
+    "pwabuilder": "node scripts/tunnel.mjs --verify --open",
+
     "cap:init": "npx cap init \"DiagAuto Pro\" com.diagauto.pro --web-dir=public",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npm run icons && npx cap sync android",
+    "cap:open:android": "npx cap open android",
+
     "apk:debug": "cd android && ./gradlew assembleDebug",
-    "apk:release": "cd android && ./gradlew assembleRelease"
+    "apk:release": "cd android && ./gradlew assembleRelease",
+
+    "apk:debug:win": "cd android && gradlew.bat assembleDebug",
+    "apk:release:win": "cd android && gradlew.bat assembleRelease",
+
+    "android:build": "npm run cap:sync && npm run apk:debug",
+    "android:build:win": "npm run cap:sync && npm run apk:debug:win"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",
-    "@capacitor/cli": "^6.2.0",
     "@capacitor/core": "^6.2.0",
-    "@capacitor-community/bluetooth-serial": "^6.1.0",
+    "@capacitor/filesystem": "^6.0.2",
+    "@capacitor/share": "^6.0.2",
+    "@capacitor/splash-screen": "^6.0.2",
+    "@capacitor/status-bar": "^6.0.2",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "web-push": "^3.6.7",
     "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "@capacitor-community/bluetooth-serial": "^6.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
   }
 }
