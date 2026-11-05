@@ -1,17 +1,25 @@
 {
   "name": "diagauto-pro",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "start": "node server/index.js",
+    "icons": "node scripts/generate-icons.mjs",
+    "start": "npm run icons && node server/index.js",
     "dev": "node --watch server/index.js",
+    "verify": "node scripts/auto-verify.mjs",
+    "verify:live": "node scripts/auto-verify.mjs --live --base http://localhost:3000",
+    "verify:prod": "node scripts/auto-verify.mjs --live --pwabuilder --strict",
+    "pwabuilder:check": "node scripts/auto-verify.mjs --live --pwabuilder --strict",
+    "tunnel": "npx --yes cloudflared tunnel --url http://localhost:3000",
     "cap:init": "npx cap init \"DiagAuto Pro\" com.diagauto.pro --web-dir=public",
     "cap:add:android": "npx cap add android",
-    "cap:sync": "npx cap sync android",
+    "cap:sync": "npm run icons && npx cap sync android",
     "apk:debug": "cd android && ./gradlew assembleDebug",
-    "apk:release": "cd android && ./gradlew assembleRelease",
-    "tunnel": "npx --yes cloudflared tunnel --url http://localhost:3000"
+    "apk:release": "cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",
