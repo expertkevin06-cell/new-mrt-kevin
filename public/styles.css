@@ -1,8 +1,8 @@
 :root{--bg:#0f172a;--surface:#111827;--surface2:#1e293b;--border:rgba(255,255,255,.08);--text:#f8fafc;--muted:#94a3b8;--primary:#3b82f6;--primary2:#1d4ed8;--success:#22c55e;--danger:#ef4444;--warning:#f59e0b;--info:#06b6d4;--radius:14px;--shadow:0 10px 30px rgba(0,0,0,.25)}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;min-height:100%}
 body{padding:16px;max-width:1100px;margin:0 auto;position:relative;z-index:1}
-#wallpaper{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#0f172a}
-#wallpaperImg,#wallpaperVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.22;filter:blur(0);transition:opacity .2s,filter .2s}
+#wallpaper{position:fixed;inset:0;z-index:-1;overflow:hidden;background:#0f172a;display:none}
+#wallpaperImg,#wallpaperVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.22;filter:blur(0);transition:opacity .2s,filter .2s;display:none}
 #wallpaperOverlay{position:absolute;inset:0;background:radial-gradient(circle at top,rgba(15,23,42,.25),rgba(2,6,23,.75));opacity:.45}
 .header{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:14px;margin-bottom:16px;border-bottom:1px solid var(--border)}
 .brand h1{margin:0;font-size:1.35rem}.brand small{color:var(--muted)}
@@ -43,4 +43,20 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 .ai-warnings{margin-top:12px;padding:12px;border-radius:12px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.25)}.ai-warnings ul{margin:8px 0 0 18px}.ai-empty{padding:12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px dashed var(--border);color:var(--muted)}
 details summary{cursor:pointer;color:var(--primary);font-weight:700;margin-top:8px}.console{background:#020617;border:1px solid var(--border);border-radius:12px;padding:12px;min-height:160px;max-height:320px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:.85rem}
 .audit-item{padding:10px 12px;border-radius:10px;background:#0b1220;border:1px solid var(--border);margin-bottom:8px;font-size:.9rem}.audit-item strong{color:var(--primary)}.small-break{overflow-wrap:anywhere}
+.ea-card{border:1px solid rgba(6,182,212,.25);background:linear-gradient(180deg,rgba(8,47,73,.35),rgba(2,6,23,.92))}
+.ea-title{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.ea-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.ea-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.ea-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.9rem}
+.ea-table th,.ea-table td{border:1px solid rgba(255,255,255,.08);padding:8px;text-align:left;vertical-align:top}
+.ea-table th{background:rgba(255,255,255,.05);color:#93c5fd}
+.ea-console{background:#020617;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;min-height:160px;max-height:320px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:.84rem}
+.ea-badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:.75rem;font-weight:800;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#cbd5e1}
+.ea-badge.ok{color:#22c55e;border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.1)}
+.ea-badge.ko{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.1)}
+.ea-badge.warn{color:#f59e0b;border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.1)}
+.ea-small{font-size:.86rem;color:#94a3b8}
+.ea-danger{border-color:rgba(239,68,68,.35)!important;background:rgba(239,68,68,.08)!important}
+.ea-section{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+.ea-section h3{margin:0 0 10px;font-size:1rem;color:#06b6d4}
 @media(max-width:980px){.tabs{grid-template-columns:repeat(3,1fr)}}@media(max-width:680px){.tabs{grid-template-columns:repeat(2,1fr)}.kv{grid-template-columns:1fr}}
