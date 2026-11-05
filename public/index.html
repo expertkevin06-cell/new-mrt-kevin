@@ -5,23 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DiagAuto Pro</title>
   <meta name="theme-color" content="#1e40af" />
-  <meta name="description" content="Diagnostic automobile IA locale, ELM, atelier, sécurité, PWA/APK." />
+  <meta name="description" content="Diagnostic automobile IA locale, ELM/UDS, atelier, sécurité, fond admin, PWA/APK." />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div id="wallpaper">
     <img id="wallpaperImg" alt="" />
-    <video id="wallpaperVideo" muted playsinline loop autoplay></video>
+    <video id="wallpaperVideo" muted playsinline loop></video>
     <div id="wallpaperOverlay"></div>
   </div>
 
   <div class="header">
     <div class="brand">
       <h1>🚗 DiagAuto Pro</h1>
-      <small>IA locale • ELM 6D • Atelier • Sécurité • Fond admin • PWA/APK</small>
+      <small>IA locale • ELM/UDS • Atelier • Sécurité • Fond admin • PWA/APK</small>
     </div>
     <div id="netStatus" class="badge offline">🔴 Hors ligne</div>
   </div>
@@ -169,7 +169,7 @@
               <option value="ble">Bluetooth Web (BLE)</option>
               <option value="capbt">Bluetooth natif Capacitor</option>
               <option value="serial">Web Serial USB</option>
-              <option value="manual">Manuel / console</option>
+              <option value="manual">Manuel / prompt</option>
             </select>
           </div>
           <div class="field"><label for="elmMacInput">Adresse / MAC si connu</label><input id="elmMacInput" placeholder="ex: 00:11:22:33:44:55" /></div>
@@ -184,65 +184,12 @@
         <div id="elmDeviceList" class="list" style="margin-top:10px;"></div>
       </div>
 
-      <div class="card">
-        <h2>🚗 Identification véhicule</h2>
-        <div class="row">
-          <button id="elmReadVinBtn" class="btn btn-primary">Lire VIN</button>
-          <button id="elmReadMileageBtn" class="btn btn-outline">Lire kilométrage</button>
-          <button id="elmReadDtcBtn" class="btn btn-outline">Lire DTC</button>
-          <button id="elmClearDtcBtn" class="btn btn-danger">Effacer DTC</button>
-          <button id="elmReadinessBtn" class="btn btn-outline">Readiness monitors</button>
-        </div>
-        <div id="elmVehicleInfo" class="kv" style="margin-top:12px;"></div>
-        <div id="elmDtcResults" class="results" style="margin-top:12px;"></div>
-      </div>
-
-      <div class="card">
-        <h2>📈 Live data</h2>
-        <div class="row">
-          <button id="elmLiveStartBtn" class="btn btn-primary">Démarrer</button>
-          <button id="elmLiveStopBtn" class="btn btn-danger">Arrêter</button>
-        </div>
-        <div id="elmLiveData" class="grid" style="margin-top:12px;"></div>
-      </div>
-
-      <div class="card">
-        <h2>💻 Calculateurs / ECUs</h2>
-        <div class="field"><label for="elmEcuProfileSelect">Profil ECU</label><select id="elmEcuProfileSelect"></select></div>
-        <button id="elmIdentifyBtn" class="btn btn-primary">Identifier ECUs</button>
-        <div id="elmEcuResults" class="results" style="margin-top:12px;"></div>
-      </div>
-
-      <div class="card" id="elmCalibCard">
-        <h2>⚙️ Calibrage / apprentissages / routines UDS</h2>
-        <div class="muted small">
-          Réservé propriétaire/admin. Les routines constructeur exactes doivent être renseignées dans les profils.
-          Une erreur de routine peut endommager un calculateur ou désactiver un système de sécurité.
-        </div>
-        <div class="grid" style="margin-top:10px;">
-          <div class="field"><label for="elmCalibProfileSelect">Profil</label><select id="elmCalibProfileSelect"></select></div>
-          <div class="field"><label for="elmCalibAddress">Adresse ECU hex</label><input id="elmCalibAddress" placeholder="7E0" /></div>
-          <div class="field"><label for="elmCalibService">Service / routine</label><input id="elmCalibService" placeholder="3101 ou 22 ou 2E" /></div>
-          <div class="field"><label for="elmCalibData">Données hex</label><input id="elmCalibData" placeholder="ex: 00 01 02" /></div>
-          <div class="field"><label for="elmCalibSecurityKey">Clé sécurité (optionnel)</label><input id="elmCalibSecurityKey" placeholder="ne pas partager de clé OEM sensible" /></div>
-        </div>
-        <button id="elmRunCalibBtn" class="btn btn-danger">Envoyer routine UDS</button>
-        <div id="elmCalibResult" class="muted small" style="margin-top:10px;"></div>
-      </div>
-
-      <div class="card">
-        <h2>🧪 Console brute</h2>
-        <div class="field"><label for="elmRawCmd">Commande ELM / UDS</label><input id="elmRawCmd" placeholder="ex: 010C, 0902, 6A F1 90" /></div>
-        <button id="elmRawSendBtn" class="btn btn-primary">Envoyer</button>
-        <pre id="elmConsole" class="console"></pre>
-        <h3 style="margin-top:14px;">Journal</h3>
-        <div id="elmLogs" class="list"></div>
-      </div>
+      <div id="elmAdvancedHost"></div>
     </section>
 
     <section id="panel-admin" class="panel hidden">
       <div class="card">
-        <h2>️ Fond d’écran admin</h2>
+        <h2>🖼️ Fond d’écran admin</h2>
         <div class="grid">
           <div class="field"><label for="wallpaperEnabled">Activer</label><select id="wallpaperEnabled"><option value="true">Oui</option><option value="false">Non</option></select></div>
           <div class="field"><label for="wallpaperType">Type</label><select id="wallpaperType"><option value="image">Image</option><option value="video">Vidéo</option></select></div>
@@ -259,7 +206,7 @@
       </div>
 
       <div class="card">
-        <h2> PIN local & chiffrement</h2>
+        <h2>🔐 PIN local & chiffrement</h2>
         <div class="kv"><div class="muted">Chiffrement local</div><div id="encStatus">—</div></div>
 
         <div id="pinSetupArea">
@@ -369,9 +316,7 @@
   </div>
 
   <div id="toastHost" class="toast-host"></div>
+
   <script type="module" src="/app.js"></script>
-    <script type="module" src="/app.js"></script>
-  <script type="module" src="/js/elm-advanced.js"></script>
-</body>
 </body>
 </html>
