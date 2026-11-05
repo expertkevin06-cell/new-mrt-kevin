@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -102,6 +104,18 @@ function requireContains(text, needles, label) {
   } else {
     ok(`${label} : contenu vérifié`);
   }
+
+  const forbidden = [];
+  if (label === 'public/index.html' && text.includes('/js/elm-advanced.js')) {
+    forbidden.push('/js/elm-advanced.js');
+  }
+  if (label === 'public/index.html' && text.includes('/js/uds-iso15765.js')) {
+    forbidden.push('/js/uds-iso15765.js');
+  }
+
+  if (forbidden.length) {
+    fail(`${label} : références externes interdites détectées -> ${forbidden.join(', ')}`);
+  }
 }
 
 function isPngBuffer(buf) {
@@ -143,17 +157,12 @@ const requiredFiles = [
   'capacitor.config.json',
 
   'server/index.js',
-  'server/elm-uds.js',
-  'server/elm-profiles.json',
 
   'public/index.html',
   'public/styles.css',
   'public/app.js',
   'public/sw.js',
   'public/manifest.webmanifest',
-
-  'public/js/uds-iso15765.js',
-  'public/js/elm-advanced.js',
 
   'public/icons/icon.svg',
   'public/icons/icon-192.png',
@@ -171,12 +180,12 @@ if (pkg) {
   if (!pkg.scripts?.start) fail('package.json : script "start" manquant');
   else ok('package.json : script start présent');
 
-  if (!pkg.scripts?.icons) warn('package.json : script "icons" manquant. Recommandé pour générer les icônes PWA.');
+  if (!pkg.scripts?.icons) warn('package.json : script "icons" manquant.');
   if (!pkg.scripts?.verify) warn('package.json : script "verify" manquant.');
   if (!pkg.dependencies?.express) fail('package.json : dépendance express manquante');
   else ok('package.json : dépendance express présente');
 
-  if (!pkg.type || pkg.type !== 'module') warn('package.json : "type": "module" recommandé pour ce projet.');
+  if (!pkg.type || pkg.type !== 'module') warn('package.json : "type": "module" recommandé.');
 }
 
 const gitignore = read('.gitignore');
@@ -205,38 +214,8 @@ requireContains(serverSrc, [
   '/api/elm/profiles',
   'WebSocketServer',
   'webPush',
-  './elm-uds.js'
+  'DEFAULT_ELM_PROFILES'
 ], 'server/index.js');
-
-const elmUdsSrc = read('server/elm-uds.js');
-requireContains(elmUdsSrc, [
-  'loadElmProfiles',
-  'saveElmProfiles',
-  'appendElmLog',
-  'getElmLogs',
-  'sanitizeElmProfilesForClient'
-], 'server/elm-uds.js');
-
-const elmProfiles = parseJson('server/elm-profiles.json');
-if (elmProfiles) {
-  if (!elmProfiles.version) fail('server/elm-profiles.json : version manquante');
-  if (!elmProfiles.transport_defaults?.tx_id) fail('server/elm-profiles.json : transport_defaults.tx_id manquant');
-  if (!Array.isArray(elmProfiles.ecu_groups) || elmProfiles.ecu_groups.length === 0) {
-    fail('server/elm-profiles.json : ecu_groups[] manquant ou vide');
-  } else {
-    ok(`server/elm-profiles.json : ${elmProfiles.ecu_groups.length} groupe(s) ECU`);
-  }
-
-  if (elmProfiles.safety?.owner_only_writes !== true) {
-    warn('server/elm-profiles.json : safety.owner_only_writes devrait être true en production.');
-  }
-
-  const raw = JSON.stringify(elmProfiles);
-  const placeholders = raw.match(/"000000"/g) || [];
-  if (placeholders.length) {
-    warn(`server/elm-profiles.json : ${placeholders.length} routine(s) placeholder "000000". À remplacer par des IDs OEM documentés et autorisés avant usage réel.`);
-  }
-}
 
 const indexHtml = read('public/index.html');
 requireContains(indexHtml, [
@@ -244,12 +223,12 @@ requireContains(indexHtml, [
   '/manifest.webmanifest',
   '/styles.css',
   '/app.js',
-  '/js/elm-advanced.js',
   'id="wallpaper"',
   'id="wallpaperImg"',
   'id="wallpaperVideo"',
   'id="wallpaperOverlay"',
   'id="panel-elm"',
+  'id="elmAdvancedHost"',
   'id="toastHost"',
   'id="lockOverlay"',
   'id="pinOverlay"',
@@ -260,9 +239,10 @@ const appJs = read('public/app.js');
 requireContains(appJs, [
   'registerServiceWorker',
   '/sw.js',
-  'window.DiagAutoElmHost',
-  'diagauto:elm-host-ready',
-  'boot(',
+  'class ElmManager',
+  'class ElmUdsChannel',
+  'function injectElmAdvanced',
+  'async function boot',
   'apiUrl(',
   'subscribePush'
 ], 'public/app.js');
@@ -279,23 +259,6 @@ requireContains(swJs, [
   "self.addEventListener('notificationclick'",
   'SKIP_WAITING'
 ], 'public/sw.js');
-
-const elmAdvancedJs = read('public/js/elm-advanced.js');
-requireContains(elmAdvancedJs, [
-  'ElmUdsChannel',
-  'diagauto:elm-host-ready',
-  'eaLoadProfilesBtn',
-  'eaScanEcusBtn',
-  'eaRawSendBtn'
-], 'public/js/elm-advanced.js');
-
-const udsIsoJs = read('public/js/uds-iso15765.js');
-requireContains(udsIsoJs, [
-  'export class ElmUdsChannel',
-  'export function hexToBytes',
-  'export function bytesToHex',
-  'describeNrc'
-], 'public/js/uds-iso15765.js');
 
 const manifest = parseJson('public/manifest.webmanifest');
 if (manifest) {
@@ -315,20 +278,20 @@ if (manifest) {
   }
 
   if (manifest.display !== 'standalone') {
-    warn('manifest.webmanifest : display devrait être "standalone" pour une meilleure expérience APK/PWA.');
+    warn('manifest.webmanifest : display devrait être "standalone".');
   }
 
   if (!isRelativeOrRootUrl(manifest.start_url)) {
-    fail('manifest.webmanifest : start_url doit être une URL relative au site, ex: "/"');
+    fail('manifest.webmanifest : start_url doit être relative, ex: "/"');
   }
 
   if (!isRelativeOrRootUrl(manifest.scope)) {
-    fail('manifest.webmanifest : scope doit être une URL relative au site, ex: "/"');
+    fail('manifest.webmanifest : scope doit être relatif, ex: "/"');
   }
 
   const hexColor = /^#[0-9a-f]{6}$/i;
-  if (!hexColor.test(manifest.theme_color)) warn('manifest.webmanifest : theme_color devrait être un hex #rrggbb');
-  if (!hexColor.test(manifest.background_color)) warn('manifest.webmanifest : background_color devrait être un hex #rrggbb');
+  if (!hexColor.test(manifest.theme_color)) warn('manifest.webmanifest : theme_color devrait être #rrggbb');
+  if (!hexColor.test(manifest.background_color)) warn('manifest.webmanifest : background_color devrait être #rrggbb');
 
   const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
   if (!icons.length) fail('manifest.webmanifest : icons[] manquant ou vide');
@@ -340,7 +303,7 @@ if (manifest) {
   if (!sizes.includes('512x512')) fail('manifest.webmanifest : icône 512x512 manquante');
 
   if (!purposes.includes('any')) warn('manifest.webmanifest : aucune icône purpose "any" détectée');
-  if (!purposes.includes('maskable')) fail('manifest.webmanifest : aucune icône purpose "maskable" détectée. PWABuilder/Android la recommande fortement.');
+  if (!purposes.includes('maskable')) fail('manifest.webmanifest : aucune icône purpose "maskable" détectée.');
 
   for (const icon of icons) {
     if (!icon.src) {
@@ -349,7 +312,7 @@ if (manifest) {
     }
 
     if (!isLocalIconSrc(icon.src)) {
-      warn(`manifest.webmanifest : icône distante détectée (${icon.src}). Privilégiez des icônes locales pour PWABuilder.`);
+      warn(`manifest.webmanifest : icône distante détectée (${icon.src}).`);
       continue;
     }
 
@@ -384,7 +347,7 @@ for (const iconFile of iconFiles) {
 }
 
 if (!exists('public/icons/apple-touch-icon.png')) {
-  warn('public/icons/apple-touch-icon.png absent. Recommandé pour iOS. Lancez npm run icons.');
+  warn('public/icons/apple-touch-icon.png absent. Lancez npm run icons.');
 } else {
   const buf = readBuffer('public/icons/apple-touch-icon.png');
   if (!isPngBuffer(buf)) fail('public/icons/apple-touch-icon.png invalide');
@@ -423,7 +386,7 @@ function fetchUrl(target, redirects = 0) {
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname + url.search,
       headers: {
-        'User-Agent': 'DiagAutoPro-AutoVerify/4.2.0',
+        'User-Agent': 'DiagAutoPro-AutoVerify/4.3.0',
         Accept: '*/*'
       },
       timeout: 8000,
@@ -475,7 +438,7 @@ function fetchUrl(target, redirects = 0) {
         err.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
         err.code === 'SELF_SIGNED_CERT_IN_CHAIN'
       ) {
-        message = `Certificat HTTPS invalide (${err.code}). Pour production, utilisez un certificat valide. Pour test local auto-signé, ajoutez --insecure.`;
+        message = `Certificat HTTPS invalide (${err.code}). Pour test local auto-signé, ajoutez --insecure.`;
       }
 
       done({ error: message });
@@ -564,7 +527,7 @@ async function runLiveChecks() {
     }
   });
 
-  const bootstrap = await checkJson('/api/bootstrap', 'API /api/bootstrap', (data) => {
+  await checkJson('/api/bootstrap', 'API /api/bootstrap', (data) => {
     const brands = Array.isArray(data.brands) ? data.brands.length : 0;
     const models = Array.isArray(data.models) ? data.models.length : 0;
     const engines = Array.isArray(data.engines) ? data.engines.length : 0;
@@ -627,7 +590,7 @@ async function runLiveChecks() {
       fail('/api/elm/profiles : JSON invalide');
     }
   } else if (elmProfilesRes.status === 401) {
-    info('/api/elm/profiles protégé par authentification (normal si auth(true) côté serveur)');
+    info('/api/elm/profiles protégé par authentification');
   } else {
     fail(`/api/elm/profiles : statut inattendu ${elmProfilesRes.status}`);
   }
@@ -722,7 +685,7 @@ if (strict && warnings > 0) {
 }
 
 if (warnings > 0) {
-  console.log('✅ Validation acceptée avec avertissements. Recommandé de les corriger avant mise en production.');
+  console.log('✅ Validation acceptée avec avertissements.');
 } else {
   console.log('✅ Validation complète réussie.');
 }
