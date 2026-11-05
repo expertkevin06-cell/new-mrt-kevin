@@ -1,8 +1,8 @@
 {
   "name": "diagauto-pro",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "private": true,
-  "description": "DiagAuto Pro — PWA/APK de diagnostic automobile avec IA locale, atelier, sécurité, fond d'écran admin, ELM/UDS avancé et vérification production.",
+  "description": "DiagAuto Pro — PWA/APK corrigée : diagnostic IA locale, atelier, sécurité, fond admin, ELM/UDS intégré, vérification production.",
   "type": "module",
   "engines": {
     "node": ">=18.18.0",
