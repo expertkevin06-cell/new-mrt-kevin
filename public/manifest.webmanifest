@@ -1,7 +1,7 @@
 {
   "name": "DiagAuto Pro — Diagnostic Ingénieur",
   "short_name": "DiagAuto",
-  "description": "Diagnostic automobile IA locale, ELM, atelier, sécurité, fond admin, PWA/APK.",
+  "description": "Diagnostic automobile IA locale, ELM/UDS, atelier, sécurité, fond admin, PWA/APK.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
