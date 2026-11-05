@@ -8,6 +8,14 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import webPush from 'web-push';
+import {
+  loadElmProfiles,
+  saveElmProfiles,
+  appendElmLog,
+  getElmLogs,
+  getElmProfileSummary,
+  sanitizeElmProfilesForClient
+} from './elm-uds.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
