@@ -1,39 +1,35 @@
 {
   "version": "4.2.0",
   "updated_at": 0,
-  "schema": "diagauto-elm-profiles/v4",
-  "legal_notice": "Base open source d'aide au diagnostic. Ne fournit aucun contournement de sécurité constructeur, aucune écriture de kilométrage, aucun bypass antidémarrage, aucune réinitialisation airbag non certifiée. Les routines marquées requires_oem_profile doivent être complétées uniquement avec des données constructeur autorisées et documentées.",
+  "legal_notice": "Base open source d'aide au diagnostic. Les écritures, routines de service, sécurités d'accès et calibrages doivent être utilisées uniquement par un professionnel habilité, avec les procédures constructeur légales et documentées. Cette base ne fournit aucun bypass de sécurité, aucune modification illégale de kilométrage, aucun contournement d'antidémarrage, aucun effacement non justifié d'airbag et aucun flash ECU non autorisé.",
   "safety": {
     "owner_only_writes": true,
     "require_confirmation_for_dangerous_routines": true,
-    "require_elm_connected_before_uds": true,
-    "require_valid_tx_id": true,
-    "forbid_unknown_write_services_by_default": true,
+    "require_owner_for_security_access": true,
+    "require_owner_for_dtc_clear": true,
+    "require_owner_for_did_write": true,
+    "require_owner_for_routine_start": true,
     "forbidden_without_oem_authorization": [
       "flash_ecu",
       "security_bypass",
-      "odometer_write",
       "immobilizer_bypass",
-      "key_learning_without_authorization",
-      "airbag_crash_data_reset_without_certification",
-      "srs_deactivation",
-      "emission_defeat",
+      "odometer_write",
+      "airbag_crash_data_reset_without_procedure",
+      "emission_system_disable",
       "dpf_delete",
       "egr_delete",
-      "adblue_scr_disable",
-      "abs_esp_disable_for_road_use",
-      "steering_angle_forgery",
-      "vin_write",
-      "part_number_forgery",
-      "software_calibration_forgery"
+      "adblue_disable",
+      "stealing_vehicle",
+      "key_clone_without_proof_of_ownership",
+      "vin_modification"
     ],
     "warnings": [
-      "Les écritures ECU peuvent endommager un calculateur si la routine n'est pas exactement conforme au constructeur.",
-      "Le security access UDS nécessite une clé légitime. Cet outil ne calcule pas de clés OEM propriétaires.",
-      "Les routines marquées XXXXXX doivent être remplacées par des valeurs constructeur documentées et autorisées.",
-      "Les systèmes airbag, ABS/ESP, haute tension et dépollution doivent être manipulés uniquement par technicien habilité.",
-      "Ne jamais effectuer de routine de sécurité véhicule en mouvement sauf si la procédure constructeur l'autorise explicitement.",
-      "La modification du kilométrage est illégale dans de nombreux pays et n'est pas fournie."
+      "Les routines marquées placeholder doivent être remplacées par des identifiants constructeur documentés avant toute utilisation réelle.",
+      "Le security access UDS nécessite une clé légitime. Cette base ne calcule pas de clés OEM propriétaires.",
+      "Les systèmes airbag, ABS/ESP, haute tension, direction assistée, freinage et dépollution sont critiques.",
+      "Une écriture DID incorrecte peut rendre un calculateur inopérant.",
+      "Une régénération FAP mal exécutée peut provoquer une surchauffe ou un incendie.",
+      "Ne jamais désactiver un système de sécurité sans procédure constructeur et remise en service validée."
     ]
   },
   "transport_defaults": {
@@ -45,100 +41,67 @@
     "block_size": 0,
     "st_min": 0,
     "timeout_ms": 5000,
-    "retry_ms": 250,
-    "max_retries": 2,
-    "can_fd": false,
-    "doip": false,
-    "bus_init": true,
-    "echo_off": true,
-    "linefeeds_off": true,
-    "headers_off": true
+    "max_frame_length": 8,
+    "support_can_fd": false,
+    "support_doip": false,
+    "support_kwp2000": false
   },
-  "protocol_catalog": {
-    "0": {
-      "name": "Automatic protocol selection",
-      "elm": "ATSP 0",
-      "description": "L'ELM327 détecte automatiquement le protocole."
+  "elm_initialization": {
+    "connect": [
+      "ATZ",
+      "ATE0",
+      "ATL0",
+      "ATSP6"
+    ],
+    "session": [
+      "ATSH {tx_id}",
+      "ATFC SD {block_size} {st_min}",
+      "ATCAF 0",
+      "ATCP {padding}"
+    ],
+    "reset": [
+      "ATZ"
+    ],
+    "notes": "Protocole 6 = ISO 15765-4 CAN 11 bits 500 kbit/s. Beaucoup d'ECU modernes exigent CAN FD, DoIP, KWP2000 ou adresses 29 bits non supportés par un ELM327 générique."
+  },
+  "protocols": {
+    "ISO_15765_4_CAN_11_500": {
+      "elm_protocol": 6,
+      "description": "CAN standard 500 kbit/s, trames 8 octets.",
+      "supported_by_generic_elm": true
     },
-    "1": {
-      "name": "ISO 9141-2 / K-Line",
-      "elm": "ATSP 1",
-      "description": "Anciens véhicules PSA, Renault, certains asiatiques."
+    "ISO_15765_4_CAN_29_500": {
+      "elm_protocol": 7,
+      "description": "CAN étendu 29 bits 500 kbit/s.",
+      "supported_by_generic_elm": "variable"
     },
-    "2": {
-      "name": "ISO 14230-4 KWP2000 fast init",
-      "elm": "ATSP 2",
-      "description": "Certains véhicules européens et asiatiques."
+    "ISO_15765_4_CAN_FD": {
+      "elm_protocol": null,
+      "description": "CAN FD trames longues. Nécessite adaptateur compatible.",
+      "supported_by_generic_elm": false
     },
-    "3": {
-      "name": "ISO 14230-4 KWP2000 slow init",
-      "elm": "ATSP 3",
-      "description": "Certains véhicules plus anciens."
+    "DOIP": {
+      "elm_protocol": null,
+      "description": "Diagnostics over IP. Nécessite interface Ethernet/Vehicle.",
+      "supported_by_generic_elm": false
     },
-    "4": {
-      "name": "ISO 15765-4 CAN 11-bit 500 kbps",
-      "elm": "ATSP 4",
-      "description": "Très courant sur véhicules modernes."
-    },
-    "5": {
-      "name": "ISO 15765-4 CAN 29-bit 500 kbps",
-      "elm": "ATSP 5",
-      "description": "CAN extendé 500 kbps."
-    },
-    "6": {
-      "name": "ISO 15765-4 CAN 11-bit 250 kbps",
-      "elm": "ATSP 6",
-      "description": "Courant sur beaucoup d'européens."
-    },
-    "7": {
-      "name": "ISO 15765-4 CAN 29-bit 250 kbps",
-      "elm": "ATSP 7",
-      "description": "CAN extendé 250 kbps."
-    },
-    "8": {
-      "name": "ISO 15765-4 CAN 11-bit 500 kbps / ISO 9141-2",
-      "elm": "ATSP 8",
-      "description": "Selon implémentation ELM."
-    },
-    "9": {
-      "name": "ISO 15765-4 CAN 29-bit 500 kbps / ISO 9141-2",
-      "elm": "ATSP 9",
-      "description": "Selon implémentation ELM."
-    },
-    "10": {
-      "name": "Manufacturer specific",
-      "elm": "ATSP 10",
-      "description": "Protocole constructeur non standard."
+    "KWP2000": {
+      "elm_protocol": "variable",
+      "description": "Ancien protocole PSA/VAG/etc. Certains ELM le supportent, d'autres non.",
+      "supported_by_generic_elm": "variable"
     }
-  },
-  "elm_at_commands": {
-    "reset": "ATZ",
-    "echo_off": "ATE0",
-    "linefeeds_off": "ATL0",
-    "headers_off": "ATH0",
-    "memory_off": "ATM0",
-    "spatial_off": "ATS0",
-    "protocol_auto": "ATSP 0",
-    "protocol_can_250": "ATSP 6",
-    "protocol_can_500": "ATSP 4",
-    "set_tx_id": "ATSH {tx_id}",
-    "set_functional_id": "ATSH {functional_id}",
-    "flow_control": "ATFC SD {block_size} {st_min}",
-    "canonical_frames_off": "ATCAF 0",
-    "padding": "ATCP {padding}",
-    "adaptive_timing_off": "ATAT0",
-    "stmin_optimization_off": "ATB0",
-    "describe": "ATD"
   },
   "nrc": {
     "0x10": "General reject",
     "0x11": "Service not supported",
     "0x12": "Sub-function not supported",
     "0x13": "Incorrect message length or invalid format",
+    "0x14": "Response pending",
+    "0x21": "Busy - repeat request",
     "0x22": "Conditions not correct",
-    "0x23": "Requested sequence not supported",
+    "0x23": "Request out of range",
     "0x24": "Request sequence error",
-    "0x25": "No key from output",
+    "0x25": "No key from output device",
     "0x26": "Invalid key",
     "0x27": "Exceed number of attempts",
     "0x28": "Required time delay not expired",
@@ -149,45 +112,58 @@
     "0x37": "Required time delay not expired",
     "0x70": "Upload/download not accepted",
     "0x71": "Transfer data suspended",
-    "0x72": "Programming failure",
-    "0x73": "General programming failure",
-    "0x74": "Wrong sequence counter",
-    "0x75": "Memory address not valid",
-    "0x76": "Memory transfer not exited",
-    "0x77": "Memory parity error",
+    "0x72": "General programming failure",
+    "0x73": "Block send not accepted",
+    "0x74": "Wrong block sequence counter",
+    "0x75": "Memory overflow",
+    "0x76": "Memory not defined",
+    "0x77": "Programmer failure",
     "0x78": "Request correctly received - response pending",
-    "0x79": "Incorrect byte count during transfer",
-    "0x7A": "Response pending",
-    "0x7B": "Sub-function not supported in active session",
-    "0x7C": "Service not supported in active session",
-    "0x7D": "Service not supported in active security level",
-    "0x7E": "Invalid keyword",
-    "0x7F": "Invalid signature"
+    "0x7E": "Sub-function not supported in active session",
+    "0x7F": "Service not supported in active session"
   },
   "services": {
     "0x10": {
       "name": "DiagnosticSessionControl",
       "type": "session",
       "write": false,
-      "description": "Change de session diagnostic : default, programming, extended."
+      "description": "Change la session diagnostic : default, programming, extended.",
+      "subfunctions": {
+        "01": "Default session",
+        "02": "Programming session",
+        "03": "Extended diagnostic session",
+        "04": "Safety system diagnostic session"
+      }
     },
     "0x11": {
       "name": "ECUReset",
       "type": "reset",
       "write": true,
-      "description": "Réinitialise un calculateur. Peut interrompre des fonctions véhicule."
+      "description": "Réinitialise un calculateur. Réservé procédure documentée.",
+      "subfunctions": {
+        "01": "Hard reset",
+        "02": "Key off reset",
+        "03": "Soft reset"
+      }
     },
-    "0x27": {
-      "name": "SecurityAccess",
-      "type": "security",
+    "0x14": {
+      "name": "ClearDiagnosticInformation",
+      "type": "write",
       "write": true,
-      "description": "Demande de seed et envoi de key. Ne calcule pas de clé OEM."
+      "description": "Efface les DTC. Généralement 14 FF FF FF."
     },
-    "0x28": {
-      "name": "CommunicationControl",
-      "type": "communication",
-      "write": true,
-      "description": "Contrôle la communication réseau d'un ECU."
+    "0x19": {
+      "name": "ReadDTCInformation",
+      "type": "read",
+      "write": false,
+      "description": "Lit les DTC et informations associées.",
+      "subfunctions": {
+        "01": "ReportNumberOfDTCByStatusMask",
+        "02": "ReportDTCByStatusMask",
+        "04": "ReportDTCSnapshotIdentification",
+        "06": "ReportDTCExtendedDataRecordByDTCNumber",
+        "0A": "ReportSupportedDTC"
+      }
     },
     "0x22": {
       "name": "ReadDataByIdentifier",
@@ -201,225 +177,99 @@
       "write": true,
       "description": "Écrit une donnée DID. Réservé administrateur et procédure documentée."
     },
-    "0x2F": {
-      "name": "InputOutputControlByIdentifier",
-      "type": "control",
+    "0x27": {
+      "name": "SecurityAccess",
+      "type": "security",
       "write": true,
-      "description": "Contrôle d'entrée/sortie via DID. Très sensible."
+      "description": "Demande de seed et envoi de key. Ne calcule pas de clé OEM."
+    },
+    "0x28": {
+      "name": "CommunicationControl",
+      "type": "write",
+      "write": true,
+      "description": "Contrôle la communication ECU/CAN. Usage procédure uniquement."
     },
     "0x31": {
       "name": "RoutineControl",
       "type": "routine",
       "write": true,
-      "description": "Démarre, arrête ou interroge une routine de service."
+      "description": "Démarre, arrête ou interroge une routine de service.",
+      "subfunctions": {
+        "01": "Start routine",
+        "02": "Stop routine",
+        "03": "Request routine results"
+      }
     },
     "0x34": {
       "name": "RequestDownload",
       "type": "flash",
       "write": true,
-      "description": "Demande de téléchargement ECU. Interdit sans procédure OEM."
+      "description": "Début de téléchargement ECU. Interdit sans procédure OEM autorisée."
     },
     "0x36": {
       "name": "TransferData",
       "type": "flash",
       "write": true,
-      "description": "Transfert de données de flash. Interdit sans procédure OEM."
+      "description": "Transfert de données ECU. Interdit sans procédure OEM autorisée."
     },
     "0x37": {
       "name": "RequestTransferExit",
       "type": "flash",
       "write": true,
-      "description": "Fin de transfert flash. Interdit sans procédure OEM."
-    },
-    "0x38": {
-      "name": "RequestFileTransfer",
-      "type": "file",
-      "write": true,
-      "description": "Transfert de fichier ECU. Interdit sans procédure OEM."
-    },
-    "0x3D": {
-      "name": "WriteMemoryByAddress",
-      "type": "write",
-      "write": true,
-      "description": "Écriture mémoire par adresse. Très sensible."
+      "description": "Fin de transfert ECU. Interdit sans procédure OEM autorisée."
     },
     "0x3E": {
       "name": "TesterPresent",
       "type": "keepalive",
       "write": false,
-      "description": "Maintient la session diagnostic ouverte."
+      "description": "Maintient la session diagnostic ouverte.",
+      "subfunctions": {
+        "00": "Zero delay",
+        "80": "Positive response suppressed"
+      }
     },
     "0x85": {
       "name": "ControlDTCSetting",
       "type": "write",
       "write": true,
-      "description": "Active ou désactive l'enregistrement des DTC pendant une procédure."
-    },
-    "0x19": {
-      "name": "ReadDTCInformation",
-      "type": "read",
-      "write": false,
-      "description": "Lit les DTC via UDS."
-    },
-    "0x14": {
-      "name": "ClearDiagnosticInformation",
-      "type": "write",
-      "write": true,
-      "description": "Efface les DTC. Réservé administrateur."
-    },
-    "0x86": {
-      "name": "ResponseOnEvent",
-      "type": "event",
-      "write": true,
-      "description": "Configuration d'événements réseau. Avancé."
+      "description": "Active ou désactive l'enregistrement des DTC pendant une procédure.",
+      "subfunctions": {
+        "01": "DTC setting off",
+        "02": "DTC setting on"
+      }
     }
   },
-  "obd_modes": {
-    "01": {
-      "name": "Show current data",
-      "description": "Lecture de variables live standard OBD-II."
+  "dtc_read_modes": {
+    "OBD_MODE_03": {
+      "description": "Lecture DTC générique OBD-II.",
+      "command": "03"
     },
-    "02": {
-      "name": "Show freeze frame data",
-      "description": "Lecture des données figées au moment du défaut."
+    "OBD_MODE_07": {
+      "description": "Readiness monitors.",
+      "command": "07"
     },
-    "03": {
-      "name": "Show stored DTCs",
-      "description": "Lecture des codes défauts mémorisés."
+    "UDS_19_02": {
+      "description": "ReportDTCByStatusMask.",
+      "payload": "19 02 FF"
     },
-    "04": {
-      "name": "Clear DTCs",
-      "description": "Effacement des codes défauts."
+    "UDS_19_04": {
+      "description": "Snapshot identification.",
+      "payload": "19 04"
     },
-    "05": {
-      "name": "Show oxygen sensor data",
-      "description": "Données sonde lambda / oxygen."
-    },
-    "06": {
-      "name": "Show onboard monitoring test results",
-      "description": "Résultats de monitors OBD."
-    },
-    "07": {
-      "name": "Show pending DTCs",
-      "description": "Codes défauts en attente."
-    },
-    "08": {
-      "name": "Control onboard component",
-      "description": "Contrôle de composants embarqués."
-    },
-    "09": {
-      "name": "Request vehicle information",
-      "description": "VIN, CID, CVN, etc."
-    },
-    "0A": {
-      "name": "Show permanent DTCs",
-      "description": "Codes défauts permanents."
+    "UDS_19_06": {
+      "description": "Extended data by DTC number.",
+      "payload_template": "19 06 {dtc_hex} {record_number}"
     }
   },
-  "pid_catalog": {
-    "format": [
-      "pid",
-      "name",
-      "unit",
-      "formula",
-      "min",
-      "max",
-      "notes"
-    ],
-    "entries": [
-      ["0100", "PIDs supportés", "", "bitmask", 0, 65535, "Retourne les PIDs 01-20 supportés."],
-      ["0101", "Monitors supportés", "", "bitmask", 0, 65535, "Monitors OBD disponibles."],
-      ["0102", "Freeze frame supporté", "", "bitmask", 0, 31, "Frames disponibles."],
-      ["0103", "Charge moteur", "%", "A * 100 / 255", 0, 100, "Calculated load value."],
-      ["0104", "Charge moteur", "%", "A * 100 / 255", 0, 100, "Commanded EGR ou load selon véhicule."],
-      ["0105", "Température liquide de refroidissement", "°C", "A - 40", -40, 215, "ECT."],
-      ["0106", "Short term fuel trim banque 1", "%", "(A - 128) * 100 / 128", -100, 99.2, "STFT."],
-      ["0107", "Long term fuel trim banque 1", "%", "(A - 128) * 100 / 128", -100, 99.2, "LTFT."],
-      ["0108", "Short term fuel trim banque 2", "%", "(A - 128) * 100 / 128", -100, 99.2, "STFT B2."],
-      ["0109", "Long term fuel trim banque 2", "%", "(A - 128) * 100 / 128", -100, 99.2, "LTFT B2."],
-      ["010A", "Pression d'admission", "kPa", "A", 0, 255, "Manifold absolute pressure."],
-      ["010B", "Pression différentielle", "kPa", "A", 0, 255, "Delta pressure."],
-      ["010C", "Régime moteur", "tr/min", "(A * 256 + B) / 4", 0, 16383.75, "RPM."],
-      ["010D", "Vitesse véhicule", "km/h", "A", 0, 255, "Vehicle speed."],
-      ["010E", "Avance allumage", "°", "(A / 2) - 64", -64, 63.5, "Ignition timing."],
-      ["010F", "Température air admission", "°C", "A - 40", -40, 215, "IAT."],
-      ["0110", "Débit d'air", "g/s", "A * 100 / 255", 0, 100, "MAF."],
-      ["0111", "Position papillon", "%", "A * 100 / 255", 0, 100, "TP."],
-      ["0112", "Commande EGR", "%", "A * 100 / 255", 0, 100, "Commanded EGR."],
-      ["0113", "Capteur oxygène", "V / ratio", "multi", 0, 1.5, "O2S."],
-      ["0114", "Capteur oxygène 2", "V / ratio", "multi", 0, 1.5, "O2S B1S2."],
-      ["0115", "Capteur oxygène 3", "V / ratio", "multi", 0, 1.5, "O2S B1S3."],
-      ["0116", "Capteur oxygène 4", "V / ratio", "multi", 0, 1.5, "O2S B1S4."],
-      ["0117", "Capteur oxygène 5", "V / ratio", "multi", 0, 1.5, "O2S B2S1."],
-      ["0118", "Capteur oxygène 6", "V / ratio", "multi", 0, 1.5, "O2S B2S2."],
-      ["0119", "Capteur oxygène 7", "V / ratio", "multi", 0, 1.5, "O2S B2S3."],
-      ["011A", "Capteur oxygène 8", "V / ratio", "multi", 0, 1.5, "O2S B2S4."],
-      ["011B", "Position arbre à cames", "°", "A * 100 / 255", 0, 100, "CMP."],
-      ["011C", "État MIL", "", "A", 0, 127, "Bit 7 = MIL on, bits 0-6 = DTC count."],
-      ["011D", "Catalyseur", "", "enum", 0, 255, "Monitor status."],
-      ["011E", "Évaporatif", "", "enum", 0, 255, "EVAP monitor status."],
-      ["011F", "Secondary air", "", "enum", 0, 255, "AIR monitor status."],
-      ["0121", "Capteur NOx", "", "multi", 0, 255, "NMHC."],
-      ["0122", "Capteur NOx 2", "", "multi", 0, 255, "NOx."],
-      ["0123", "Capteur NOx 3", "", "multi", 0, 255, "NOx."],
-      ["0124", "Capteur NOx 4", "", "multi", 0, 255, "NOx."],
-      ["0125", "Capteur NOx 5", "", "multi", 0, 255, "NOx."],
-      ["0126", "Capteur NOx 6", "", "multi", 0, 255, "NOx."],
-      ["0127", "Capteur NOx 7", "", "multi", 0, 255, "NOx."],
-      ["0128", "Capteur NOx 8", "", "multi", 0, 255, "NOx."],
-      ["0129", "Capteur NOx 9", "", "multi", 0, 255, "NOx."],
-      ["012A", "Capteur NOx 10", "", "multi", 0, 255, "NOx."],
-      ["012B", "Capteur NOx 11", "", "multi", 0, 255, "NOx."],
-      ["012C", "Capteur NOx 12", "", "multi", 0, 255, "NOx."],
-      ["012D", "Capteur NOx 13", "", "multi", 0, 255, "NOx."],
-      ["012E", "Capteur NOx 14", "", "multi", 0, 255, "NOx."],
-      ["012F", "Capteur NOx 15", "", "multi", 0, 255, "NOx."],
-      ["0130", "Capteur NOx 16", "", "multi", 0, 255, "NOx."],
-      ["0131", "Capteur NOx 17", "", "multi", 0, 255, "NOx."],
-      ["0132", "Capteur NOx 18", "", "multi", 0, 255, "NOx."],
-      ["0133", "Capteur NOx 19", "", "multi", 0, 255, "NOx."],
-      ["0134", "Capteur NOx 20", "", "multi", 0, 255, "NOx."],
-      ["0135", "Capteur NOx 21", "", "multi", 0, 255, "NOx."],
-      ["0136", "Capteur NOx 22", "", "multi", 0, 255, "NOx."],
-      ["0137", "Capteur NOx 23", "", "multi", 0, 255, "NOx."],
-      ["0138", "Capteur NOx 24", "", "multi", 0, 255, "NOx."],
-      ["0139", "Capteur NOx 25", "", "multi", 0, 255, "NOx."],
-      ["013A", "Capteur NOx 26", "", "multi", 0, 255, "NOx."],
-      ["013B", "Capteur NOx 27", "", "multi", 0, 255, "NOx."],
-      ["013C", "Capteur NOx 28", "", "multi", 0, 255, "NOx."],
-      ["013D", "Capteur NOx 29", "", "multi", 0, 255, "NOx."],
-      ["013E", "Capteur NOx 30", "", "multi", 0, 255, "NOx."],
-      ["0141", "Capteur NOx 31", "", "multi", 0, 255, "NOx."],
-      ["0142", "Tension système", "V", "(A * 256 + B) / 1000", 0, 65.535, "Battery voltage."],
-      ["0143", "Pression rail carburant", "kPa", "(A * 256 + B) * 10", 0, 655350, "Fuel rail pressure."],
-      ["0144", "Pression rail carburant", "kPa", "(A * 256 + B) * 10", 0, 655350, "Alternative."],
-      ["0145", "Pression rail carburant", "kPa", "(A * 256 + B) * 10", 0, 655350, "Alternative."],
-      ["0146", "Température module", "°C", "A - 40", -40, 215, "Module temperature."],
-      ["0147", "Pression carburant", "kPa", "A * 100 / 255", 0, 100, "Fuel pressure."],
-      ["0148", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["0149", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014A", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014B", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014C", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014D", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014E", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["014F", "Pression différentielle", "kPa", "A * 100 / 255", 0, 100, "Delta pressure."],
-      ["0151", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0152", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0153", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0154", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0155", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0156", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0157", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0158", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["0159", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015A", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015B", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015C", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015D", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015E", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."],
-      ["015F", "Ratio éthanol", "%", "A * 100 / 255", 0, 100, "Ethanol fuel."]
-    ]
+  "dtc_formats": {
+    "OBD_II": {
+      "pattern": "[PUBCR][0-9A-F]{4}",
+      "example": "P0300"
+    },
+    "UDS_DTC_BYTE": {
+      "description": "DTC codé sur 3 octets en UDS, souvent converti en code OBD-like.",
+      "example_hex": "94 01 00"
+    }
   },
   "standard_dids": {
     "F187": "Identité véhicule active",
@@ -436,144 +286,1957 @@
     "F198": "Date de fabrication",
     "F199": "Pièce système",
     "F19A": "Software calibration identification",
-    "F19B": "Supply index",
-    "F19C": "Data identification",
-    "F19D": "Extension data identification",
-    "F1A0": "Battery charge status",
-    "F1A1": "Battery charge level",
-    "F1A2": "Battery charge capacity",
-    "F1A3": "Battery state of health",
-    "F1A4": "Battery temperature",
-    "F1A5": "Battery voltage",
-    "F1A6": "Battery current",
-    "F1A7": "Battery insulation resistance",
-    "F1A8": "Battery module count",
-    "F1A9": "Battery serial number"
+    "F1AA": "Vehicule identification number (alternative)",
+    "F1AC": "Batch data",
+    "F1AD": "Assembly data vehicle",
+    "F1B0": "Boîte de vitesses software number",
+    "F1B1": "Boîte de vitesses hardware number",
+    "F1C0": "ABS software number",
+    "F1C1": "ABS hardware number",
+    "F1D0": "Airbag software number",
+    "F1D1": "Airbag hardware number"
   },
-  "manufacturer_did_ranges": {
-    "generic": {
-      "readable": ["F100-F1FF", "F400-F4FF"],
-      "writable": ["F100-F1FF", "F400-F4FF"],
-      "note": "Les plages F1xx et F4xx sont souvent utilisées par les constructeurs, mais le contenu est propriétaire."
+  "common_live_pids": {
+    "0104": "Charge moteur (%)",
+    "0105": "Température liquide de refroidissement (°C)",
+    "0106": "Short term fuel trim banque 1 (%)",
+    "0107": "Long term fuel trim banque 1 (%)",
+    "010B": "Pression d'admission (kPa)",
+    "010C": "Régime moteur (tr/min)",
+    "010D": "Vitesse véhicule (km/h)",
+    "010E": "Température air admission (°C)",
+    "010F": "Température carburant (°C)",
+    "0110": "Charge du système de propulsion (%)",
+    "0111": "Position papillon (%)",
+    "0112": "Pression barométrique (kPa)",
+    "0113": "Absolute load (%)",
+    "011C": "Nombre de DTC et état MIL",
+    "0121": "Distance parcourue depuis effacement DTC (km)",
+    "012F": "Carburant (%)"
+  },
+  "brands": {
+    "BR-RENAULT": {
+      "name": "Renault",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     },
-    "renault_psa": {
-      "readable": ["F1xx", "F4xx", "5xxx"],
-      "writable": ["F1xx", "F4xx", "5xxx"],
-      "note": "Lexia/Diagbox/Toolstream utilisent des tables propriétaires non incluses."
+    "BR-PEUGEOT": {
+      "name": "Peugeot",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     },
-    "vw_group": {
-      "readable": ["F1xx", "F4xx", "0xxx"],
-      "writable": ["F1xx", "F4xx", "0xxx"],
-      "note": "ODIS/VAS nécessite données OEM."
+    "BR-CITROEN": {
+      "name": "Citroën",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     },
-    "bmw": {
-      "readable": ["F1xx", "F4xx", "Exxx"],
-      "writable": ["F1xx", "F4xx", "Exxx"],
-      "note": "ISTA/BimmerCode nécessite données OEM et autorisations."
+    "BR-DS": {
+      "name": "DS Automobiles",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     },
-    "mercedes": {
-      "readable": ["F1xx", "F4xx", "Cxxx"],
-      "writable": ["F1xx", "F4xx", "Cxxx"],
-      "note": "XENTRY nécessite données OEM."
+    "BR-DACIA": {
+      "name": "Dacia",
+      "country": "RO",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     },
-    "toyota": {
-      "readable": ["F1xx", "F4xx", "2xxx"],
-      "writable": ["F1xx", "F4xx", "2xxx"],
-      "note": "Techstream nécessite données OEM."
+    "BR-ALPINE": {
+      "name": "Alpine",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BUGATTI": {
+      "name": "Bugatti",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-AIXAM": {
+      "name": "Aixam",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LIGIER": {
+      "name": "Ligier",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MICROCAR": {
+      "name": "Microcar",
+      "country": "FR",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-VOLKSWAGEN": {
+      "name": "Volkswagen",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-AUDI": {
+      "name": "Audi",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SKODA": {
+      "name": "Škoda",
+      "country": "CZ",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SEAT": {
+      "name": "SEAT",
+      "country": "ES",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-CUPRA": {
+      "name": "Cupra",
+      "country": "ES",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BMW": {
+      "name": "BMW",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MINI": {
+      "name": "MINI",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MERCEDES-BENZ": {
+      "name": "Mercedes-Benz",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SMART": {
+      "name": "Smart",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-PORSCHE": {
+      "name": "Porsche",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-OPEL": {
+      "name": "Opel",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-VAUXHALL": {
+      "name": "Vauxhall",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-FORD": {
+      "name": "Ford",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-CHEVROLET": {
+      "name": "Chevrolet",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-GMC": {
+      "name": "GMC",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-CADILLAC": {
+      "name": "Cadillac",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LINCOLN": {
+      "name": "Lincoln",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BUICK": {
+      "name": "Buick",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-DODGE": {
+      "name": "Dodge",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-CHRYSLER": {
+      "name": "Chrysler",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-JEEP": {
+      "name": "Jeep",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-RAM": {
+      "name": "Ram",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-TESLA": {
+      "name": "Tesla",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-RIVIAN": {
+      "name": "Rivian",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LUCID": {
+      "name": "Lucid Motors",
+      "country": "US",
+      "region": "AMERIQUE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-TOYOTA": {
+      "name": "Toyota",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LEXUS": {
+      "name": "Lexus",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-HONDA": {
+      "name": "Honda",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-ACURA": {
+      "name": "Acura",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-NISSAN": {
+      "name": "Nissan",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-INFINITI": {
+      "name": "Infiniti",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MAZDA": {
+      "name": "Mazda",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SUBARU": {
+      "name": "Subaru",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MITSUBISHI": {
+      "name": "Mitsubishi",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SUZUKI": {
+      "name": "Suzuki",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-DAIHATSU": {
+      "name": "Daihatsu",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-ISUZU": {
+      "name": "Isuzu",
+      "country": "JP",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-HYUNDAI": {
+      "name": "Hyundai",
+      "country": "KR",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-KIA": {
+      "name": "Kia",
+      "country": "KR",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-GENESIS": {
+      "name": "Genesis",
+      "country": "KR",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SSANGYONG": {
+      "name": "SsangYong",
+      "country": "KR",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-TATA": {
+      "name": "Tata",
+      "country": "IN",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MAHINDRA": {
+      "name": "Mahindra",
+      "country": "IN",
+      "region": "ASIE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BYD": {
+      "name": "BYD",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-NIO": {
+      "name": "NIO",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-XPENG": {
+      "name": "XPeng",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LI-AUTO": {
+      "name": "Li Auto",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-ZEEKR": {
+      "name": "Zeekr",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-GEELY": {
+      "name": "Geely",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-CHERY": {
+      "name": "Chery",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-OMODA": {
+      "name": "Omoda",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-JAECCOO": {
+      "name": "Jaecoo",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-JETOUR": {
+      "name": "Jetour",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-GREAT-WALL": {
+      "name": "Great Wall Motor",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-HAVAL": {
+      "name": "Haval",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-TANK": {
+      "name": "Tank",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-WEY": {
+      "name": "Wey",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MG": {
+      "name": "MG Motor",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MAXUS": {
+      "name": "MAXUS",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LEAPMOTOR": {
+      "name": "Leapmotor",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-AVATAR": {
+      "name": "Avatr",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-DEEPAL": {
+      "name": "Deepal",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-HONGQI": {
+      "name": "Hongqi",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BAIC": {
+      "name": "BAIC",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-BEIJING": {
+      "name": "Beijing Auto",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-DONGFENG": {
+      "name": "Dongfeng",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-FOTON": {
+      "name": "Foton",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-GAC": {
+      "name": "GAC",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-TRUMPCHI": {
+      "name": "Trumpchi",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LYNK-CO": {
+      "name": "Lynk & Co",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-SINOTRUK": {
+      "name": "Sinotruk",
+      "country": "CN",
+      "region": "CHINE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-VOLVO": {
+      "name": "Volvo",
+      "country": "SE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-POLESTAR": {
+      "name": "Polestar",
+      "country": "SE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-KOENIGSEGG": {
+      "name": "Koenigsegg",
+      "country": "SE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-ASTON-MARTIN": {
+      "name": "Aston Martin",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MCLAREN": {
+      "name": "McLaren",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LOTUS": {
+      "name": "Lotus",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-JAGUAR": {
+      "name": "Jaguar",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LAND-ROVER": {
+      "name": "Land Rover",
+      "country": "GB",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-FERRARI": {
+      "name": "Ferrari",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LAMBORGHINI": {
+      "name": "Lamborghini",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MASERATI": {
+      "name": "Maserati",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-PAGANI": {
+      "name": "Pagani",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-ALFA-ROMEO": {
+      "name": "Alfa Romeo",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-LANCIA": {
+      "name": "Lancia",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-IVECO": {
+      "name": "Iveco",
+      "country": "IT",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
+    },
+    "BR-MAN": {
+      "name": "MAN",
+      "country": "DE",
+      "region": "EUROPE",
+      "protocol": "CAN",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF"
     }
   },
-  "dtc_catalog": {
-    "format": [
-      "code",
-      "description",
-      "severity",
-      "systems",
-      "causes",
-      "solutions"
+  "brand_aliases": {
+    "renault": "BR-RENAULT",
+    "peugeot": "BR-PEUGEOT",
+    "citroen": "BR-CITROEN",
+    "citroën": "BR-CITROEN",
+    "ds": "BR-DS",
+    "dacia": "BR-DACIA",
+    "alpine": "BR-ALPINE",
+    "bugatti": "BR-BUGATTI",
+    "aixam": "BR-AIXAM",
+    "ligier": "BR-LIGIER",
+    "microcar": "BR-MICROCAR",
+    "volkswagen": "BR-VOLKSWAGEN",
+    "vw": "BR-VOLKSWAGEN",
+    "audi": "BR-AUDI",
+    "skoda": "BR-SKODA",
+    "škoda": "BR-SKODA",
+    "seat": "BR-SEAT",
+    "cupra": "BR-CUPRA",
+    "bmw": "BR-BMW",
+    "mini": "BR-MINI",
+    "mercedes": "BR-MERCEDES-BENZ",
+    "mercedes-benz": "BR-MERCEDES-BENZ",
+    "smart": "BR-SMART",
+    "porsche": "BR-PORSCHE",
+    "opel": "BR-OPEL",
+    "vauxhall": "BR-VAUXHALL",
+    "ford": "BR-FORD",
+    "chevrolet": "BR-CHEVROLET",
+    "gmc": "BR-GMC",
+    "cadillac": "BR-CADILLAC",
+    "lincoln": "BR-LINCOLN",
+    "buick": "BR-BUICK",
+    "dodge": "BR-DODGE",
+    "chrysler": "BR-CHRYSLER",
+    "jeep": "BR-JEEP",
+    "ram": "BR-RAM",
+    "tesla": "BR-TESLA",
+    "rivian": "BR-RIVIAN",
+    "lucid": "BR-LUCID",
+    "toyota": "BR-TOYOTA",
+    "lexus": "BR-LEXUS",
+    "honda": "BR-HONDA",
+    "acura": "BR-ACURA",
+    "nissan": "BR-NISSAN",
+    "infiniti": "BR-INFINITI",
+    "mazda": "BR-MAZDA",
+    "subaru": "BR-SUBARU",
+    "mitsubishi": "BR-MITSUBISHI",
+    "suzuki": "BR-SUZUKI",
+    "daihatsu": "BR-DAIHATSU",
+    "isuzu": "BR-ISUZU",
+    "hyundai": "BR-HYUNDAI",
+    "kia": "BR-KIA",
+    "genesis": "BR-GENESIS",
+    "ssangyong": "BR-SSANGYONG",
+    "tata": "BR-TATA",
+    "mahindra": "BR-MAHINDRA",
+    "byd": "BR-BYD",
+    "nio": "BR-NIO",
+    "xpeng": "BR-XPENG",
+    "li auto": "BR-LI-AUTO",
+    "zeekr": "BR-ZEEKR",
+    "geely": "BR-GEELY",
+    "chery": "BR-CHERY",
+    "omoda": "BR-OMODA",
+    "jaecoo": "BR-JAECCOO",
+    "jetour": "BR-JETOUR",
+    "great wall": "BR-GREAT-WALL",
+    "haval": "BR-HAVAL",
+    "tank": "BR-TANK",
+    "wey": "BR-WEY",
+    "mg": "BR-MG",
+    "maxus": "BR-MAXUS",
+    "leapmotor": "BR-LEAPMOTOR",
+    "avatr": "BR-AVATAR",
+    "deepal": "BR-DEEPAL",
+    "hongqi": "BR-HONGQI",
+    "baic": "BR-BAIC",
+    "beijing": "BR-BEIJING",
+    "dongfeng": "BR-DONGFENG",
+    "foton": "BR-FOTON",
+    "gac": "BR-GAC",
+    "trumpchi": "BR-TRUMPCHI",
+    "lynk": "BR-LYNK-CO",
+    "sinotruk": "BR-SINOTRUK",
+    "volvo": "BR-VOLVO",
+    "polestar": "BR-POLESTAR",
+    "koenigsegg": "BR-KOENIGSEGG",
+    "aston martin": "BR-ASTON-MARTIN",
+    "mclaren": "BR-MCLAREN",
+    "lotus": "BR-LOTUS",
+    "jaguar": "BR-JAGUAR",
+    "land rover": "BR-LAND-ROVER",
+    "ferrari": "BR-FERRARI",
+    "lamborghini": "BR-LAMBORGHINI",
+    "maserati": "BR-MASERATI",
+    "pagani": "BR-PAGANI",
+    "alfa romeo": "BR-ALFA-ROMEO",
+    "lancia": "BR-LANCIA",
+    "iveco": "BR-IVECO",
+    "man": "BR-MAN"
+  },
+  "scan_profiles": {
+    "standard_can_11bit": {
+      "request_ids": [
+        "7E0", "7E1", "7E2", "7E3", "7E4", "7E5", "7E6", "7E7",
+        "7E8", "7E9", "7EA", "7EB", "7EC", "7ED", "7EE", "7EF"
+      ],
+      "functional_id": "7DF",
+      "description": "Adresses UDS/ISO-TP classiques 11 bits."
+    },
+    "extended_can_29bit_examples": {
+      "request_ids": [
+        "18DA00F1", "18DAF110", "18DAF120", "18DAF130", "18DAF140"
+      ],
+      "description": "Exemples d'adresses étendues. Non garanti sur ELM327 générique."
+    }
+  },
+  "ecu_groups": [
+    {
+      "id": "ENGINE_ESSENCE_GENERIC",
+      "name": "Calculateur moteur essence générique UDS",
+      "category": "MOTEUR",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195", "F197"],
+      "variables": [
+        { "name": "Régime moteur", "source": "pid", "pid": "010C", "unit": "tr/min", "confirmed": true },
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Température liquide de refroidissement", "source": "pid", "pid": "0105", "unit": "°C", "confirmed": true },
+        { "name": "Charge moteur", "source": "pid", "pid": "0104", "unit": "%", "confirmed": true },
+        { "name": "Position papillon", "source": "pid", "pid": "0111", "unit": "%", "confirmed": true },
+        { "name": "Tension système", "source": "pid", "pid": "0142", "unit": "V", "confirmed": true },
+        { "name": "Short term fuel trim banque 1", "source": "pid", "pid": "0106", "unit": "%", "confirmed": true },
+        { "name": "Long term fuel trim banque 1", "source": "pid", "pid": "0107", "unit": "%", "confirmed": true },
+        { "name": "Température air admission", "source": "pid", "pid": "010E", "unit": "°C", "confirmed": true },
+        { "name": "Pression barométrique", "source": "pid", "pid": "0112", "unit": "kPa", "confirmed": true },
+        { "name": "Pression differentielle admission (exemple DID)", "source": "did", "did": "F460", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "kPa", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Débit d'air (exemple DID)", "source": "did", "did": "F461", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "g/s", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "THROTTLE_LEARN", "name": "Apprentissage boîtier papillon", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Remplacer 000000 par la routine OEM documentée." },
+        { "id": "IDLE_LEARN", "name": "Apprentissage ralenti", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "FUEL_TRIM_RESET", "name": "Réinitialisation adaptations carburant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "IGNITION_COIL_TEST", "name": "Test bobine d'allumage", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut court-circuiter volontairement un cylindre. Procédure constructeur obligatoire." },
+        { "id": "CATALYST_MONITOR_TEST", "name": "Test moniteur catalyseur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Groupe moteur essence générique. Les DID exacts et routines dépendent du constructeur."
+    },
+    {
+      "id": "ENGINE_DIESEL_GENERIC",
+      "name": "Calculateur moteur diesel générique UDS",
+      "category": "MOTEUR",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195", "F197"],
+      "variables": [
+        { "name": "Régime moteur", "source": "pid", "pid": "010C", "unit": "tr/min", "confirmed": true },
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Température liquide de refroidissement", "source": "pid", "pid": "0105", "unit": "°C", "confirmed": true },
+        { "name": "Charge moteur", "source": "pid", "pid": "0104", "unit": "%", "confirmed": true },
+        { "name": "Position papillon", "source": "pid", "pid": "0111", "unit": "%", "confirmed": true },
+        { "name": "Tension système", "source": "pid", "pid": "0142", "unit": "V", "confirmed": true },
+        { "name": "Pression rail carburant (exemple DID)", "source": "did", "did": "F467", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression suralimentation (exemple DID)", "source": "did", "did": "F468", "byte_offset": 0, "length": 2, "scale": 0.01, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température huile moteur (exemple DID)", "source": "did", "did": "F469", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Masse suie FAP (exemple DID)", "source": "did", "did": "F46A", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "g", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Différentiel pression FAP (exemple DID)", "source": "did", "did": "F46B", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "kPa", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "DPF_FORCED_REGEN", "name": "Régénération forcée FAP/DPF", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER : température élevée, risque incendie. Procédure constructeur obligatoire." },
+        { "id": "EGR_ADAPTATION", "name": "Adaptation vanne EGR", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "INJECTOR_CODING", "name": "Codage injecteur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Écriture calibration injecteur. Procédure constructeur obligatoire." },
+        { "id": "GLOW_PLUG_TEST", "name": "Test bougies de préchauffage", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TURBO_ACTUATOR_CALIBRATION", "name": "Calibrage actionneur turbo", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Opération sensible. Réservé technicien qualifié." },
+        { "id": "RAIL_PRESSURE_LEARN", "name": "Apprentissage pression rail", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Groupe diesel générique. FAP, EGR, injecteurs et turbo sont très dépendants du constructeur."
+    },
+    {
+      "id": "ENGINE_HYBRID_GENERIC",
+      "name": "Calculateur moteur hybride générique UDS",
+      "category": "MOTEUR",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Régime moteur thermique", "source": "pid", "pid": "010C", "unit": "tr/min", "confirmed": true },
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Température liquide moteur", "source": "pid", "pid": "0105", "unit": "°C", "confirmed": true },
+        { "name": "Position papillon", "source": "pid", "pid": "0111", "unit": "%", "confirmed": true },
+        { "name": "Tension système 12V", "source": "pid", "pid": "0142", "unit": "V", "confirmed": true },
+        { "name": "SOC batterie HT (exemple DID)", "source": "did", "did": "F4A0", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Régime moteur électrique (exemple DID)", "source": "did", "did": "F4A6", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": true, "unit": "tr/min", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température onduleur (exemple DID)", "source": "did", "did": "F4A7", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "HYBRID_SELF_TEST", "name": "Auto-test système hybride", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut mettre sous tension des circuits HT. Habilitation EV/HV requise." },
+        { "id": "ENGINE_START_STOP_ADAPTATION", "name": "Adaptation Start & Stop hybride", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "BATTERY_FAN_TEST", "name": "Test ventilation batterie HT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Hybride : risque haute tension. Ne pas exécuter de routine sans habilitation."
+    },
+    {
+      "id": "ENGINE_ELECTRIC_GENERIC",
+      "name": "Calculateur traction électrique générique UDS",
+      "category": "ELECTRIQUE",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Tension système 12V", "source": "pid", "pid": "0142", "unit": "V", "confirmed": true },
+        { "name": "Régime moteur électrique (exemple DID)", "source": "did", "did": "F4A6", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": true, "unit": "tr/min", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Couple moteur électrique (exemple DID)", "source": "did", "did": "F4A8", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3200, "signed": true, "unit": "Nm", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température onduleur (exemple DID)", "source": "did", "did": "F4A7", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Résistance d'isolement HT (exemple DID)", "source": "did", "did": "F4A5", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "kΩ/V", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "HV_SELF_TEST", "name": "Auto-test haute tension", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT : uniquement technicien habilité EV/HV." },
+        { "id": "INSULATION_TEST", "name": "Test d'isolement haute tension", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT. Habilitation obligatoire." },
+        { "id": "INVERTER_COOLING_TEST", "name": "Test refroidissement onduleur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Véhicule électrique. Haute tension critique."
+    },
+    {
+      "id": "TRANSMISSION_AUTOMATIC_GENERIC",
+      "name": "Boîte automatique générique UDS",
+      "category": "TRANSMISSION",
+      "tx_id": "7E1",
+      "rx_id": "7E9",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Rapport sélectionné (exemple DID)", "source": "did", "did": "F469", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température huile boîte (exemple DID)", "source": "did", "did": "F46A", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression ligne boîte (exemple DID)", "source": "did", "did": "F46C", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Glissement convertisseur (exemple DID)", "source": "did", "did": "F46D", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": true, "unit": "tr/min", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TCM_RESET_ADAPTATIONS", "name": "Réinitialisation adaptations TCM", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut modifier le comportement de la boîte. Procédure OEM requise." },
+        { "id": "LEARN_SHIFT_POINTS", "name": "Apprentissage points de passage", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "VALVE_BODY_CALIBRATION", "name": "Calibrage bloc mécatronique / corps de vannes", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Opération sensible. Réservé atelier qualifié." },
+        { "id": "FLUID_SERVICE_RESET", "name": "Réinitialisation durée de vie huile boîte", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Boîte automatique générique."
+    },
+    {
+      "id": "TRANSMISSION_DSG_GENERIC",
+      "name": "Boîte DSG / double embrayage générique UDS",
+      "category": "TRANSMISSION",
+      "tx_id": "7E1",
+      "rx_id": "7E9",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Rapport actuel (exemple DID)", "source": "did", "did": "F469", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température embrayage 1 (exemple DID)", "source": "did", "did": "F46E", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température embrayage 2 (exemple DID)", "source": "did", "did": "F46F", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Position embrayage 1 (exemple DID)", "source": "did", "did": "F46B", "byte_offset": 0, "length": 1, "scale": 0.392, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression mécatronique (exemple DID)", "source": "did", "did": "F46C", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "CLUTCH_ADAPTATION", "name": "Apprentissage embrayage DSG", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise. Peut modifier le comportement de la boîte." },
+        { "id": "BASIC_SETTING", "name": "Basic setting / réglage de base DSG", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Opération sensible. Réservé atelier qualifié." },
+        { "id": "MECHATRONIC_CALIBRATION", "name": "Calibrage mécatronique DSG", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "DSG_OIL_SERVICE_RESET", "name": "Réinitialisation entretien huile DSG", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "DSG, DCT, double embrayage. Les routines exactes sont fortement spécifiques constructeur."
+    },
+    {
+      "id": "TRANSMISSION_EAT_GENERIC",
+      "name": "Boîte EAT6 / EAT7 / EAT8 générique UDS",
+      "category": "TRANSMISSION",
+      "tx_id": "7E1",
+      "rx_id": "7E9",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Rapport actuel (exemple DID)", "source": "did", "did": "F469", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température huile boîte (exemple DID)", "source": "did", "did": "F46A", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression convertisseur (exemple DID)", "source": "did", "did": "F46D", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Statut lock-up (exemple DID)", "source": "did", "did": "F475", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Débrayé", "1": "Embrayé", "2": "Partiel" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "EAT_ADAPTATION_RESET", "name": "Réinitialisation adaptations EAT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "EAT_LEARN_SHIFT", "name": "Apprentissage passages EAT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "EAT_VALVE_BODY_CAL", "name": "Calibrage corps de vannes EAT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Opération sensible." }
+      ],
+      "notes": "Familles EAT issues Aisin / PSA / Toyota."
+    },
+    {
+      "id": "TRANSMISSION_TIPTRONIC_GENERIC",
+      "name": "Boîte TIPTRONIC / ZF générique UDS",
+      "category": "TRANSMISSION",
+      "tx_id": "7E1",
+      "rx_id": "7E9",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F193", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse véhicule", "source": "pid", "pid": "010D", "unit": "km/h", "confirmed": true },
+        { "name": "Rapport actuel (exemple DID)", "source": "did", "did": "F469", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température huile boîte (exemple DID)", "source": "did", "did": "F46A", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression ligne (exemple DID)", "source": "did", "did": "F46C", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TIPTRONIC_ADAPTATION_RESET", "name": "Réinitialisation adaptations TIPTRONIC", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TIPTRONIC_LEARN_SHIFT", "name": "Apprentissage passages TIPTRONIC", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TIPTRONIC_FLUID_RESET", "name": "Réinitialisation durée de vie huile BV", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "TIPTRONIC BMW / ZF. Les accès détaillés relèvent d'ISTA ou d'outils autorisés."
+    },
+    {
+      "id": "ABS_GENERIC",
+      "name": "ABS générique UDS",
+      "category": "CHASSIS",
+      "tx_id": "7E2",
+      "rx_id": "7EA",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Vitesse roue AV gauche (exemple DID)", "source": "did", "did": "F470", "byte_offset": 0, "length": 2, "scale": 0.056, "offset": 0, "signed": false, "unit": "km/h", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Vitesse roue AV droit (exemple DID)", "source": "did", "did": "F471", "byte_offset": 0, "length": 2, "scale": 0.056, "offset": 0, "signed": false, "unit": "km/h", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Vitesse roue AR gauche (exemple DID)", "source": "did", "did": "F472", "byte_offset": 0, "length": 2, "scale": 0.056, "offset": 0, "signed": false, "unit": "km/h", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Vitesse roue AR droit (exemple DID)", "source": "did", "did": "F473", "byte_offset": 0, "length": 2, "scale": 0.056, "offset": 0, "signed": false, "unit": "km/h", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression maître-cylindre (exemple DID)", "source": "did", "did": "F476", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "ABS_PUMP_TEST", "name": "Test pompe ABS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut actionner la pompe ABS. Véhicule à l'arrêt, procédure OEM requise." },
+        { "id": "ABS_BLEEDING_MODE", "name": "Mode purge ABS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "WHEEL_SPEED_SENSOR_CAL", "name": "Calibration capteur vitesse roue", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "ABS = système de sécurité. Ne pas exécuter de routine sans maîtrise totale."
+    },
+    {
+      "id": "ESP_GENERIC",
+      "name": "ESP / ESC / stabilité générique UDS",
+      "category": "CHASSIS",
+      "tx_id": "7E2",
+      "rx_id": "7EA",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Angle volant (exemple DID)", "source": "did", "did": "F474", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3276.8, "signed": true, "unit": "°", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Vitesse de lacet (exemple DID)", "source": "did", "did": "F477", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3276.8, "signed": true, "unit": "°/s", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Accélération latérale (exemple DID)", "source": "did", "did": "F478", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": -12.8, "signed": true, "unit": "m/s²", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Accélération longitudinale (exemple DID)", "source": "did", "did": "F479", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": -12.8, "signed": true, "unit": "m/s²", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "STEERING_ANGLE_ZERO", "name": "Zero position angle volant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Nécessite roues droites. Routine OEM requise." },
+        { "id": "G_SENSOR_CALIBRATION", "name": "Calibrage capteur de lacet / accélération", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Sécurité ESP. Réservé technicien habilité." },
+        { "id": "ESP_SELF_TEST", "name": "Auto-test ESP", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut actionner freins/pompe. Procédure OEM requise." }
+      ],
+      "notes": "ESP/ESC critique."
+    },
+    {
+      "id": "AIRBAG_SRS_GENERIC",
+      "name": "Airbag / SRS générique UDS",
+      "category": "SECURITE",
+      "tx_id": "7E3",
+      "rx_id": "7EB",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Crash data present (exemple DID)", "source": "did", "did": "F480", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Aucune", "1": "Présente", "2": "Lue / mémorisée" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Résistance circuit déclencheur (exemple DID)", "source": "did", "did": "F481", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "ohm", "confirmed": false, "note": "DID constructeur à confirmer. Lecture uniquement." }
+      ],
+      "routines": [
+        { "id": "AIRBAG_CRASH_DATA_READ", "name": "Lecture données crash", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Lecture seulement. Ne pas effacer sans procédure légale et technique." },
+        { "id": "AIRBAG_CRASH_DATA_RESET", "name": "Réinitialisation crash data", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER : système de sécurité. Uniquement technicien habilité et intervention justifiée." },
+        { "id": "SRS_SELF_TEST", "name": "Auto-test SRS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Ne jamais actionner de circuit pyrotechnique sans procédure constructeur." }
+      ],
+      "notes": "Airbag = sécurité vitale. Cet outil ne fournit pas de bypass."
+    },
+    {
+      "id": "BODY_BCM_GENERIC",
+      "name": "Carrosserie / BCM / body générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État porte conducteur (exemple DID)", "source": "did", "did": "F490", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Fermée", "1": "Ouverte" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "État contact (exemple DID)", "source": "did", "did": "F491", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Coupé", "1": "Contact", "2": "Démarrage" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température extérieure (exemple DID)", "source": "did", "did": "F492", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "WINDOW_CALIBRATION", "name": "Apprentissage lève-vitre", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "MIRROR_FOLD_TEST", "name": "Test répliques / miroirs", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "CENTRAL_LOCKING_TEST", "name": "Test verrouillage centralisé", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "BCM varie énormément selon constructeur."
+    },
+    {
+      "id": "CLUSTER_GENERIC",
+      "name": "Compteur / cluster générique UDS",
+      "category": "HABITACLE",
+      "tx_id": "7E7",
+      "rx_id": "7EF",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Kilométrage (lecture seule, exemple DID)", "source": "did", "did": "F4C0", "byte_offset": 0, "length": 4, "scale": 1, "offset": 0, "signed": false, "unit": "km", "confirmed": false, "note": "DID constructeur à confirmer. L'écriture de kilométrage est interdite." },
+        { "name": "Vitesse affichée (exemple DID)", "source": "did", "did": "F4C1", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "km/h", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Niveau carburant (exemple DID)", "source": "did", "did": "F4C2", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "SERVICE_LIGHT_RESET", "name": "Réinitialisation témoin entretien", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TRIP_RESET", "name": "Réinitialisation compteur partiel", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Aucune écriture odomètre n'est fournie. Modification de kilométrage illégale dans de nombreux pays."
+    },
+    {
+      "id": "HVAC_AC_GENERIC",
+      "name": "Climatisation / HVAC générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Température consigne habitacle (exemple DID)", "source": "did", "did": "F493", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température mesurée habitacle (exemple DID)", "source": "did", "did": "F491", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression frigorigène BP (exemple DID)", "source": "did", "did": "F494", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression frigorigène HP (exemple DID)", "source": "did", "did": "F495", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "AC_COMPRESSOR_TEST", "name": "Test compresseur clim", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "BLEND_DOOR_CALIBRATION", "name": "Apprentissage volets de mélange", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "CLIMATE_SELF_TEST", "name": "Auto-test climatisation", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "HVAC/AC."
+    },
+    {
+      "id": "STEERING_EPS_GENERIC",
+      "name": "Direction assistée électrique EPS générique UDS",
+      "category": "CHASSIS",
+      "tx_id": "7E2",
+      "rx_id": "7EA",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Angle volant (exemple DID)", "source": "did", "did": "F474", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3276.8, "signed": true, "unit": "°", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Couple volant (exemple DID)", "source": "did", "did": "F496", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3276.8, "signed": true, "unit": "Nm", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température moteur EPS (exemple DID)", "source": "did", "did": "F497", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "EPS_ZERO_POINT", "name": "Point zéro direction assistée", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Roues droites obligatoires. Routine OEM requise." },
+        { "id": "TORQUE_SENSOR_CAL", "name": "Calibrage capteur de couple volant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Sécurité direction. Réservé technicien habilité." },
+        { "id": "ASSIST_MAP_ADAPTATION", "name": "Adaptation carte d'assistance", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "EPS critique pour la sécurité."
+    },
+    {
+      "id": "SUSPENSION_AIR_GENERIC",
+      "name": "Suspension pneumatique / pilotée générique UDS",
+      "category": "CHASSIS",
+      "tx_id": "7E2",
+      "rx_id": "7EA",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Hauteur caisse AV (exemple DID)", "source": "did", "did": "F498", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "mm", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Hauteur caisse AR (exemple DID)", "source": "did", "did": "F499", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "mm", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression réservoir suspension (exemple DID)", "source": "did", "did": "F49A", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "RIDE_HEIGHT_CALIBRATION", "name": "Calibrage hauteur de caisse", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Véhicule sur sol plat, procédure OEM requise." },
+        { "id": "COMPRESSOR_TEST", "name": "Test compresseur suspension", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Suspension pilotée / air suspension."
+    },
+    {
+      "id": "TPMS_GENERIC",
+      "name": "TPMS / pression pneus générique UDS",
+      "category": "CHASSIS",
+      "tx_id": "7E2",
+      "rx_id": "7EA",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Pression pneu AV gauche (exemple DID)", "source": "did", "did": "F49B", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression pneu AV droit (exemple DID)", "source": "did", "did": "F49C", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression pneu AR gauche (exemple DID)", "source": "did", "did": "F49D", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression pneu AR droit (exemple DID)", "source": "did", "did": "F49E", "byte_offset": 0, "length": 1, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TPMS_LEARN", "name": "Apprentissage capteurs TPMS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TPMS_PRESSURE_RESET", "name": "Réinitialisation pression TPMS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "TPMS."
+    },
+    {
+      "id": "IMMOBILIZER_GENERIC",
+      "name": "Antidémarrage / immobilizer générique UDS",
+      "category": "SECURITE",
+      "tx_id": "7E3",
+      "rx_id": "7EB",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État reconnaissance clé (exemple DID)", "source": "did", "did": "F4A9", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Non reconnue", "1": "Reconnue", "2": "Erreur" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Nombre de clés apprises (exemple DID)", "source": "did", "did": "F4AA", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "KEY_LEARNING", "name": "Apprentissage clé / transpondeur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Uniquement avec preuve de propriété et procédure légale. Aucun bypass fourni." },
+        { "id": "IMMO_SELF_TEST", "name": "Auto-test antidémarrage", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Aucun contournement d'antidémarrage n'est fourni. L'apprentissage clé doit être légal et justifié."
+    },
+    {
+      "id": "GATEWAY_GENERIC",
+      "name": "Passerelle CAN / gateway générique UDS",
+      "category": "RESEAU",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État réseau CAN (exemple DID)", "source": "did", "did": "F4AB", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Normal", "1": "Erreur", "2": "Sommeil" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "GW_CONFIG_READ", "name": "Lecture configuration gateway", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "NETWORK_SLEEP_WAKE_TEST", "name": "Test mise en veille / réveil réseau", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Gateway / zoning."
+    },
+    {
+      "id": "ADAS_CAMERA_GENERIC",
+      "name": "Caméra ADAS / aide à la conduite générique UDS",
+      "category": "ADAS",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État caméra (exemple DID)", "source": "did", "did": "F4AC", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "OK", "1": "Défaut", "2": "Non calibrée" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "CAMERA_CALIBRATION", "name": "Calibrage caméra ADAS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Nécessite cible de calibration et procédure constructeur." },
+        { "id": "ADAS_RESET", "name": "Réinitialisation ADAS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "ADAS critique. Calibration obligatoire après dépose, choc, pare-brise, géométrie."
+    },
+    {
+      "id": "ADAS_RADAR_GENERIC",
+      "name": "Radar ADAS / régulation générique UDS",
+      "category": "ADAS",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État radar (exemple DID)", "source": "did", "did": "F4AD", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "OK", "1": "Défaut", "2": "Non aligné" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "RADAR_CALIBRATION", "name": "Calibrage radar ADAS", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Nécessite cible et procédure constructeur." },
+        { "id": "RADAR_SELF_TEST", "name": "Auto-test radar", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Radar ACC / emergency braking."
+    },
+    {
+      "id": "PARKING_ASSIST_GENERIC",
+      "name": "Aide au stationnement / PDC générique UDS",
+      "category": "ADAS",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État capteurs de stationnement (exemple DID)", "source": "did", "did": "F4AE", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "OK", "1": "Défaut" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "PDC_CALIBRATION", "name": "Calibrage capteurs stationnement", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "PDC_SELF_TEST", "name": "Auto-test PDC", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Park assist."
+    },
+    {
+      "id": "HV_BATTERY_BMS_GENERIC",
+      "name": "Batterie haute tension / BMS générique UDS",
+      "category": "ELECTRIQUE",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "SOC batterie HT (exemple DID)", "source": "did", "did": "F4A0", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "SOH batterie HT (exemple DID)", "source": "did", "did": "F4A1", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Tension batterie HT (exemple DID)", "source": "did", "did": "F4A2", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "V", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Courant batterie HT (exemple DID)", "source": "did", "did": "F4A3", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3200, "signed": true, "unit": "A", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température module batterie (exemple DID)", "source": "did", "did": "F4A4", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Résistance d'isolement HT (exemple DID)", "source": "did", "did": "F4A5", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "kΩ/V", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "BATTERY_BALANCING", "name": "Équilibrage batterie HT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Procédure constructeur obligatoire." },
+        { "id": "INSULATION_TEST", "name": "Test d'isolement haute tension", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT. Habilitation obligatoire." },
+        { "id": "CONTACTOR_TEST", "name": "Test contacteurs HT", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT. Habilitation obligatoire." },
+        { "id": "BATTERY_COOLING_TEST", "name": "Test refroidissement batterie", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Haute tension : ne jamais intervenir sans habilitation et procédures constructeur."
+    },
+    {
+      "id": "HV_INVERTER_GENERIC",
+      "name": "Onduleur / inverter générique UDS",
+      "category": "ELECTRIQUE",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Température onduleur (exemple DID)", "source": "did", "did": "F4A7", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température IGBT/MOSFET (exemple DID)", "source": "did", "did": "F4AF", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Courant phase moteur (exemple DID)", "source": "did", "did": "F4B2", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3200, "signed": true, "unit": "A", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "INVERTER_SELF_TEST", "name": "Auto-test onduleur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT. Habilitation obligatoire." },
+        { "id": "INVERTER_COOLING_TEST", "name": "Test refroidissement onduleur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Onduleur / inverseur."
+    },
+    {
+      "id": "HV_DCDC_GENERIC",
+      "name": "Convertisseur DC/DC générique UDS",
+      "category": "ELECTRIQUE",
+      "tx_id": "7E5",
+      "rx_id": "7ED",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Tension sortie 12V (exemple DID)", "source": "did", "did": "F4B3", "byte_offset": 0, "length": 2, "scale": 0.01, "offset": 0, "signed": false, "unit": "V", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Température DC/DC (exemple DID)", "source": "did", "did": "F4B4", "byte_offset": 0, "length": 1, "scale": 1, "offset": -40, "signed": false, "unit": "°C", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "DCDC_SELF_TEST", "name": "Auto-test DC/DC", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER HT. Habilitation obligatoire." },
+        { "id": "DCDC_COOLING_TEST", "name": "Test refroidissement DC/DC", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "DC/DC HT vers 12V."
+    },
+    {
+      "id": "HV_CHARGING_GENERIC",
+      "name": "Recharge / chargeur embarqué / port de charge générique UDS",
+      "category": "ELECTRIQUE",
+      "tx_id": "7E6",
+      "rx_id": "7EE",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État de charge (exemple DID)", "source": "did", "did": "F4B0", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Inactif", "1": "En charge", "2": "Charge terminée", "3": "Défaut" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Puissance de charge (exemple DID)", "source": "did", "did": "F4B1", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "kW", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Verrouillage prise de charge (exemple DID)", "source": "did", "did": "F4B5", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Déverrouillé", "1": "Verrouillé", "2": "Défaut" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "CHARGE_PORT_UNLOCK", "name": "Déverrouillage prise de charge", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "ONBOARD_CHARGER_SELF_TEST", "name": "Auto-test chargeur embarqué", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Procédure constructeur obligatoire." }
+      ],
+      "notes": "Recharge AC/DC très dépendante du constructeur et de la borne."
+    },
+    {
+      "id": "EMISSION_DPF_GENERIC",
+      "name": "FAP / DPF / filtre à particules générique UDS",
+      "category": "DEPOLLUTION",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Masse suie FAP (exemple DID)", "source": "did", "did": "F46A", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "g", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Différentiel pression FAP (exemple DID)", "source": "did", "did": "F46B", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "kPa", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Statut régénération (exemple DID)", "source": "did", "did": "F4B6", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Inactive", "1": "En cours", "2": "Terminée", "3": "Échec" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "DPF_FORCED_REGEN", "name": "Régénération forcée FAP/DPF", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "DANGER : température élevée, risque incendie. Procédure constructeur obligatoire." },
+        { "id": "DPF_RESET", "name": "Réinitialisation compteur suie FAP", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "DIFFERENTIAL_PRESSURE_SENSOR_CAL", "name": "Calibrage capteur différentiel FAP", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "FAP/DPF. Ne jamais supprimer ou désactiver le système."
+    },
+    {
+      "id": "EMISSION_SCR_GENERIC",
+      "name": "SCR / AdBlue / urée générique UDS",
+      "category": "DEPOLLUTION",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Niveau AdBlue (exemple DID)", "source": "did", "did": "F4B7", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Qualité AdBlue (exemple DID)", "source": "did", "did": "F4B8", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "OK", "1": "Douteuse", "2": "Hors spécification" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "NOx aval (exemple DID)", "source": "did", "did": "F4B9", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "ppm", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "SCR_PURGE", "name": "Purge système SCR", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "ADBLUE_QUALITY_TEST", "name": "Test qualité AdBlue", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "NOX_SENSOR_CAL", "name": "Calibrage capteur NOx", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "SCR/AdBlue. Ne pas désactiver le système."
+    },
+    {
+      "id": "EMISSION_EGR_GENERIC",
+      "name": "EGR / recirculation gaz échappement générique UDS",
+      "category": "DEPOLLUTION",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Position EGR (exemple DID)", "source": "did", "did": "F4BA", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Débit EGR (exemple DID)", "source": "did", "did": "F4BB", "byte_offset": 0, "length": 2, "scale": 1, "offset": 0, "signed": false, "unit": "g/s", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "EGR_ADAPTATION", "name": "Adaptation vanne EGR", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "EGR_LEAK_TEST", "name": "Test d'étanchéité EGR", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "EGR. Ne pas désactiver ni supprimer."
+    },
+    {
+      "id": "TURBO_BOOST_GENERIC",
+      "name": "Turbo / suralimentation / wastegate générique UDS",
+      "category": "MOTEUR",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Pression suralimentation mesurée (exemple DID)", "source": "did", "did": "F468", "byte_offset": 0, "length": 2, "scale": 0.01, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Consigne pression suralimentation (exemple DID)", "source": "did", "did": "F4BC", "byte_offset": 0, "length": 2, "scale": 0.01, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Position wastegate / GV (exemple DID)", "source": "did", "did": "F4BD", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TURBO_ACTUATOR_CALIBRATION", "name": "Calibrage actionneur turbo", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Opération sensible. Réservé technicien qualifié." },
+        { "id": "BOOST_LEAK_TEST", "name": "Test d'étanchéité suralimentation", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Turbo, wastegate, géométrie variable."
+    },
+    {
+      "id": "FUEL_SYSTEM_GENERIC",
+      "name": "Circuit carburant / pompe / pression générique UDS",
+      "category": "MOTEUR",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Pression carburant basse (exemple DID)", "source": "did", "did": "F4BE", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Pression rail haute (exemple DID)", "source": "did", "did": "F467", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": 0, "signed": false, "unit": "bar", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Niveau carburant (exemple DID)", "source": "did", "did": "F4C2", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "FUEL_PUMP_TEST", "name": "Test pompe à carburant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "FUEL_PRIME", "name": "Amorçage circuit carburant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Pompe, filtre, pression."
+    },
+    {
+      "id": "STARTER_ALTERNATOR_GENERIC",
+      "name": "Démarrage / charge / alterno-démarreur générique UDS",
+      "category": "ELECTRICITE",
+      "tx_id": "7E0",
+      "rx_id": "7E8",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Tension batterie (exemple DID)", "source": "did", "did": "F4BF", "byte_offset": 0, "length": 2, "scale": 0.01, "offset": 0, "signed": false, "unit": "V", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "Courant charge/décharge 12V (exemple DID)", "source": "did", "did": "F4C3", "byte_offset": 0, "length": 2, "scale": 0.1, "offset": -3200, "signed": true, "unit": "A", "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "État alterno-démarreur (exemple DID)", "source": "did", "did": "F4C4", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Repos", "1": "Charge", "2": "Démarreur", "3": "Défaut" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "ALTERNATOR_SELF_TEST", "name": "Auto-test alternateur", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "STARTER_TEST", "name": "Test démarreur / ISG", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": true, "placeholder": true, "requires_oem_id": true, "warning": "Peut entraîner le moteur. Procédure OEM requise." }
+      ],
+      "notes": "Batterie, alternateur, alterno-démarreur, DC/DC 12V."
+    },
+    {
+      "id": "LIGHTING_GENERIC",
+      "name": "Éclairage / matrix / adaptive lights générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État feux croisement (exemple DID)", "source": "did", "did": "F4C5", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Éteint", "1": "Allumé" }, "confirmed": false, "note": "DID constructeur à confirmer." },
+        { "name": "État feux route (exemple DID)", "source": "did", "did": "F4C6", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Éteint", "1": "Allumé" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "HEADLIGHT_LEVELING", "name": "Réglage assiette phares", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "MATRIX_LIGHT_TEST", "name": "Test éclairage matriciel", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Éclairage avancé."
+    },
+    {
+      "id": "WIPER_GENERIC",
+      "name": "Essuie-glaces / lavage générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Position balai AV (exemple DID)", "source": "did", "did": "F4C7", "byte_offset": 0, "length": 1, "scale": 0.5, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "WIPER_PARK_CALIBRATION", "name": "Apprentissage position de repos essuie-glace", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "WASHER_TEST", "name": "Test lave-glace", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Essuie-glaces."
+    },
+    {
+      "id": "SEAT_MEMORY_GENERIC",
+      "name": "Sièges / mémoire / confort générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Position siège conducteur (exemple DID)", "source": "did", "did": "F4C8", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "SEAT_MEMORY_SET", "name": "Mémorisation position siège", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "SEAT_MOVEMENT_TEST", "name": "Test mouvement siège", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Sièges électriques / mémoire."
+    },
+    {
+      "id": "MIRROR_GENERIC",
+      "name": "Rétroviseurs / rabattage générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État rabattement miroir (exemple DID)", "source": "did", "did": "F4C9", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Déplié", "1": "Replié" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "MIRROR_FOLD_TEST", "name": "Test rabattement miroirs", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "MIRROR_CALIBRATION", "name": "Apprentissage miroirs", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Rétroviseurs électriques."
+    },
+    {
+      "id": "DOOR_LOCK_GENERIC",
+      "name": "Portes / verrouillage / accès générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État verrouillage (exemple DID)", "source": "did", "did": "F4CA", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Déverrouillé", "1": "Verrouillé" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "LOCK_ACTUATOR_TEST", "name": "Test actionneur verrouillage", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "DOOR_SWITCH_TEST", "name": "Test contacts de porte", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Portes et verrouillage."
+    },
+    {
+      "id": "TRUNK_TAILGATE_GENERIC",
+      "name": "Coffre / hayon / ouvrant générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État hayon (exemple DID)", "source": "did", "did": "F4CB", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Fermé", "1": "Ouvert", "2": "En mouvement" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TAILGATE_CALIBRATION", "name": "Apprentissage hayon électrique", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "TAILGATE_TEST", "name": "Test ouverture/fermeture hayon", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Hayon / coffre électrique."
+    },
+    {
+      "id": "SUNROOF_GENERIC",
+      "name": "Toit ouvrant / toit panoramique générique UDS",
+      "category": "CONFORT",
+      "tx_id": "7E4",
+      "rx_id": "7EC",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "Position toit ouvrant (exemple DID)", "source": "did", "did": "F4CC", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "%", "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "SUNROOF_CALIBRATION", "name": "Apprentissage toit ouvrant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "SUNROOF_TEST", "name": "Test mouvement toit ouvrant", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Toit ouvrant."
+    },
+    {
+      "id": "TELEMATICS_GENERIC",
+      "name": "Télématique / connectivité / TCU générique UDS",
+      "category": "RESEAU",
+      "tx_id": "7E6",
+      "rx_id": "7EE",
+      "functional_id": "7DF",
+      "dids": ["F190", "F191", "F194", "F195"],
+      "variables": [
+        { "name": "État connexion réseau (exemple DID)", "source": "did", "did": "F4CD", "byte_offset": 0, "length": 1, "scale": 1, "offset": 0, "signed": false, "unit": "", "enum": { "0": "Hors réseau", "1": "En réseau", "2": "Erreur" }, "confirmed": false, "note": "DID constructeur à confirmer." }
+      ],
+      "routines": [
+        { "id": "TCU_SELF_TEST", "name": "Auto-test TCU", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." },
+        { "id": "NETWORK_RESET", "name": "Réinitialisation module télématique", "service": "31", "routine_id": "000000", "requires_owner": true, "danger": false, "placeholder": true, "requires_oem_id": true, "warning": "Routine OEM requise." }
+      ],
+      "notes": "Télématique, e-call, connectivité."
+    }
+  ],
+  "procedure_templates": [
+    {
+      "id": "GENERIC_IDENTIFICATION",
+      "name": "Identification générique ECU",
+      "danger": false,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Passage en session étendue." },
+        { "order": 2, "payload": "3E 00", "note": "Tester présent." },
+        { "order": 3, "payload": "22 F190", "note": "Lecture VIN." },
+        { "order": 4, "payload": "22 F194", "note": "Lecture numéro logiciel." },
+        { "order": 5, "payload": "22 F195", "note": "Lecture numéro matériel." },
+        { "order": 6, "payload": "19 02 FF", "note": "Lecture DTC par masque de statut." }
+      ]
+    },
+    {
+      "id": "GENERIC_CLEAR_DTC",
+      "name": "Effacement DTC générique UDS",
+      "danger": false,
+      "requires_owner": true,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Session étendue." },
+        { "order": 2, "payload": "14 FF FF FF", "note": "Effacement de tous les DTC." },
+        { "order": 3, "payload": "10 01", "note": "Retour session par défaut." }
+      ]
+    },
+    {
+      "id": "GENERIC_SECURITY_ACCESS",
+      "name": "Security access UDS générique",
+      "danger": true,
+      "requires_owner": true,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Session étendue." },
+        { "order": 2, "payload": "27 01", "note": "Demande de seed niveau 01." },
+        { "order": 3, "payload": "27 02 {key}", "note": "Envoi de la clé légitime. Aucune clé OEM n'est calculée ici." },
+        { "order": 4, "payload": "3E 00", "note": "Tester présent." }
+      ]
+    },
+    {
+      "id": "GENERIC_ROUTINE_START_POLL_STOP",
+      "name": "Routine UDS start / polling / stop",
+      "danger": true,
+      "requires_owner": true,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Session étendue." },
+        { "order": 2, "payload": "27 01", "note": "Security access si requis." },
+        { "order": 3, "payload": "27 02 {key}", "note": "Clé légitime si requis." },
+        { "order": 4, "payload": "31 01 {routine_id} {option_record}", "note": "Démarrage routine." },
+        { "order": 5, "payload": "31 03 {routine_id}", "note": "Interrogation résultats, à répéter." },
+        { "order": 6, "payload": "31 02 {routine_id}", "note": "Arrêt routine si requis." },
+        { "order": 7, "payload": "10 01", "note": "Retour session par défaut." }
+      ]
+    },
+    {
+      "id": "GENERIC_WRITE_DID",
+      "name": "Écriture DID UDS",
+      "danger": true,
+      "requires_owner": true,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Session étendue." },
+        { "order": 2, "payload": "27 01", "note": "Security access si requis." },
+        { "order": 3, "payload": "27 02 {key}", "note": "Clé légitime si requis." },
+        { "order": 4, "payload": "2E {did} {data}", "note": "Écriture DID." },
+        { "order": 5, "payload": "22 {did}", "note": "Relecture de contrôle." },
+        { "order": 6, "payload": "10 01", "note": "Retour session par défaut." }
+      ]
+    },
+    {
+      "id": "GENERIC_CONTROL_DTC",
+      "name": "Contrôle enregistrement DTC",
+      "danger": false,
+      "requires_owner": true,
+      "steps": [
+        { "order": 1, "payload": "10 03", "note": "Session étendue." },
+        { "order": 2, "payload": "85 01", "note": "DTC setting off pendant procédure." },
+        { "order": 3, "payload": "{procedure_steps}", "note": "Exécution de la procédure." },
+        { "order": 4, "payload": "85 02", "note": "DTC setting on." },
+        { "order": 5, "payload": "10 01", "note": "Retour session par défaut." }
+      ]
+    }
+  ],
+  "validation_rules": {
+    "max_payload_bytes": 4095,
+    "min_payload_bytes": 1,
+    "hex_only": true,
+    "allowed_read_services": ["10", "19", "22", "3E", "85"],
+    "allowed_write_services": ["11", "14", "27", "28", "2E", "31", "85"],
+    "forbidden_services_without_oem": ["34", "36", "37"],
+    "forbidden_keywords": [
+      "bypass",
+      "crack",
+      "hack",
+      "clone key illegally",
+      "odometer rollback",
+      "delete dpf",
+      "disable airbag",
+      "immobilizer off",
+      "emissions defeat"
+    ]
+  },
+  "ui_presets": {
+    "quick_read": [
+      { "label": "VIN", "payload": "22 F190" },
+      { "label": "Software", "payload": "22 F194" },
+      { "label": "Hardware", "payload": "22 F195" },
+      { "label": "DTC", "payload": "19 02 FF" },
+      { "label": "Tester present", "payload": "3E 00" }
     ],
-    "entries": [
-      ["P0100", "Circuit débitmètre d'air MAF", "medium", "Admission;Capteurs", "MAF HS, câblage, connecteur, filtre", "Nettoyer/remplacer MAF, vérifier faisceau"],
-      ["P0101", "Circuit MAF plage hors limites", "medium", "Admission;Capteurs", "MAF sale, fuite vide, papillon", "Nettoyer MAF, rechercher fuite"],
-      ["P0102", "Circuit MAF entrée basse", "medium", "Admission;Capteurs", "MAF HS, court-circuit", "Remplacer MAF, réparer câblage"],
-      ["P0103", "Circuit MAF entrée haute", "medium", "Admission;Capteurs", "MAF défaillant, circuit ouvert", "Remplacer MAF, vérifier 5V"],
-      ["P0110", "Circuit température air admission", "low", "Admission;Capteurs", "IAT HS, câblage", "Remplacer IAT"],
-      ["P0112", "Circuit IAT entrée basse", "low", "Admission;Capteurs", "Court-circuit IAT", "Réparer faisceau"],
-      ["P0113", "Circuit IAT entrée haute", "low", "Admission;Capteurs", "Circuit ouvert IAT", "Réparer connecteur"],
-      ["P0115", "Circuit température liquide ECT", "high", "Refroidissement;Capteurs", "ECT HS, niveau bas", "Remplacer ECT, vérifier liquide"],
-      ["P0116", "Circuit ECT plage", "high", "Refroidissement;Capteurs", "Sonde dérivée", "Comparer valeur réelle"],
-      ["P0117", "Circuit ECT entrée basse", "high", "Refroidissement;Capteurs", "Court-circuit", "Réparer câblage"],
-      ["P0118", "Circuit ECT entrée haute", "high", "Refroidissement;Capteurs", "Circuit ouvert", "Réparer connecteur"],
-      ["P0120", "Circuit capteur position papillon TPS", "high", "Admission;Capteurs", "TPS HS, câblage", "Remplacer TPS"],
-      ["P0121", "Circuit TPS plage", "high", "Admission;Capteurs", "Papillon usé", "Nettoyer/remplacer papillon"],
-      ["P0122", "Circuit TPS entrée basse", "high", "Admission;Capteurs", "Court-circuit", "Réparer faisceau"],
-      ["P0123", "Circuit TPS entrée haute", "high", "Admission;Capteurs", "Circuit ouvert", "Réparer connecteur"],
-      ["P0125", "Température liquide insuffisante boucle fermée", "medium", "Refroidissement;Thermostat", "Thermostat ouvert, ECT HS", "Remplacer thermostat/ECT"],
-      ["P0126", "Température liquide insuffisante", "medium", "Refroidissement;Thermostat", "Thermostat bloqué ouvert", "Remplacer thermostat"],
-      ["P0128", "Thermostat en dessous de température", "medium", "Refroidissement;Thermostat", "Thermostat ouvert", "Remplacer thermostat"],
-      ["P0130", "Circuit sonde lambda B1S1", "medium", "Échappement;Sondes", "Sonde HS, câblage", "Remplacer sonde"],
-      ["P0131", "Sonde lambda B1S1 signal bas", "medium", "Échappement;Sondes", "Fuite admission, injecteur", "Rechercher fuite"],
-      ["P0132", "Sonde lambda B1S1 signal haut", "medium", "Échappement;Sondes", "Injecteur qui fuit", "Tester injecteurs"],
-      ["P0133", "Sonde lambda B1S1 réponse lente", "low", "Échappement;Sondes", "Sonde vieillissante", "Remplacer sonde"],
-      ["P0134", "Sonde lambda B1S1 aucune activité", "medium", "Échappement;Sondes", "Sonde HS, câblage", "Remplacer sonde"],
-      ["P0135", "Circuit chauffage sonde B1S1", "medium", "Échappement;Sondes", "Résistance HS", "Remplacer sonde"],
-      ["P0136", "Circuit sonde lambda B1S2", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0137", "Sonde lambda B1S2 signal bas", "medium", "Échappement;Sondes", "Fuite, sonde", "Tester sonde"],
-      ["P0138", "Sonde lambda B1S2 signal haut", "medium", "Échappement;Sondes", "Riche, sonde", "Tester injection"],
-      ["P0139", "Sonde lambda B1S2 réponse lente", "low", "Échappement;Sondes", "Contamination", "Remplacer sonde"],
-      ["P0140", "Sonde lambda B1S2 aucune activité", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0141", "Circuit chauffage sonde B1S2", "medium", "Échappement;Sondes", "Résistance HS", "Remplacer sonde"],
-      ["P0150", "Circuit sonde lambda B2S1", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0151", "Sonde lambda B2S1 signal bas", "medium", "Échappement;Sondes", "Fuite admission B2", "Rechercher fuite"],
-      ["P0152", "Sonde lambda B2S1 signal haut", "medium", "Échappement;Sondes", "Injecteur B2", "Tester injecteurs"],
-      ["P0153", "Sonde lambda B2S1 réponse lente", "low", "Échappement;Sondes", "Sonde usée", "Remplacer sonde"],
-      ["P0154", "Sonde lambda B2S1 aucune activité", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0155", "Circuit chauffage sonde B2S1", "medium", "Échappement;Sondes", "Résistance HS", "Remplacer sonde"],
-      ["P0156", "Circuit sonde lambda B2S2", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0157", "Sonde lambda B2S2 signal bas", "medium", "Échappement;Sondes", "Fuite, sonde", "Tester sonde"],
-      ["P0158", "Sonde lambda B2S2 signal haut", "medium", "Échappement;Sondes", "Riche, sonde", "Tester injection"],
-      ["P0159", "Sonde lambda B2S2 réponse lente", "low", "Échappement;Sondes", "Contamination", "Remplacer sonde"],
-      ["P0160", "Sonde lambda B2S2 aucune activité", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0161", "Circuit chauffage sonde B2S2", "medium", "Échappement;Sondes", "Résistance HS", "Remplacer sonde"],
-      ["P0162", "Circuit capteur oxygène 3", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0163", "Sonde lambda signal bas", "medium", "Échappement;Sondes", "Pauvre, fuite", "Rechercher fuite"],
-      ["P0164", "Sonde lambda signal haut", "medium", "Échappement;Sondes", "Riche, injecteur", "Tester injection"],
-      ["P0165", "Sonde lambda réponse lente", "low", "Échappement;Sondes", "Sonde usée", "Remplacer sonde"],
-      ["P0166", "Sonde lambda aucune activité", "medium", "Échappement;Sondes", "Sonde HS", "Remplacer sonde"],
-      ["P0167", "Circuit chauffage sonde", "medium", "Échappement;Sondes", "Résistance HS", "Remplacer sonde"],
-      ["P0171", "Système trop pauvre banque 1", "high", "Admission;Injection;Capteurs", "Fuite admission, MAF, injecteurs, pompe", "Test fumigène, nettoyer MAF, tester pression"],
-      ["P0172", "Système trop riche banque 1", "high", "Injection;Carburant", "Injecteurs qui fuient, régulateur", "Tester injecteurs, pression"],
-      ["P0174", "Système trop pauvre banque 2", "high", "Admission;Injection;Capteurs", "Fuite B2, MAF", "Rechercher fuite"],
-      ["P0175", "Système trop riche banque 2", "high", "Injection;Carburant", "Injecteur B2", "Tester injecteurs"],
-      ["P0200", "Circuit injecteur", "high", "Injection", "Injecteur HS, driver ECU", "Tester injecteur, câblage"],
-      ["P0201", "Circuit injecteur cylindre 1", "high", "Injection", "Injecteur cyl.1", "Permuter injecteur"],
-      ["P0202", "Circuit injecteur cylindre 2", "high", "Injection", "Injecteur cyl.2", "Permuter injecteur"],
-      ["P0203", "Circuit injecteur cylindre 3", "high", "Injection", "Injecteur cyl.3", "Permuter injecteur"],
-      ["P0204", "Circuit injecteur cylindre 4", "high", "Injection", "Injecteur cyl.4", "Permuter injecteur"],
-      ["P0217", "Surchauffe moteur", "critical", "Refroidissement", "Thermostat, pompe, ventilateur, niveau", "Vérifier refroidissement"],
-      ["P0218", "Surchauffe transmission", "critical", "Transmission;Refroidissement", "Huile BV, refroidisseur", "Vérifier huile BV"],
-      ["P0220", "Circuit capteur position papillon", "high", "Admission;Capteurs", "TPS HS", "Remplacer TPS"],
-      ["P0221", "Circuit TPS plage", "high", "Admission;Capteurs", "Papillon usé", "Nettoyer/remplacer"],
-      ["P0222", "Circuit TPS entrée basse", "high", "Admission;Capteurs", "Court-circuit", "Réparer faisceau"],
-      ["P0223", "Circuit TPS entrée haute", "high", "Admission;Capteurs", "Circuit ouvert", "Réparer connecteur"],
-      ["P0225", "Circuit capteur pédale 1", "high", "Admission;Électronique", "Capteur pédale HS", "Remplacer pédale/capteur"],
-      ["P0226", "Circuit capteur pédale 2", "high", "Admission;Électronique", "Capteur pédale HS", "Remplacer pédale/capteur"],
-      ["P0227", "Capteur pédale signal bas", "high", "Admission;Électronique", "Court-circuit", "Réparer câblage"],
-      ["P0228", "Capteur pédale signal haut", "high", "Admission;Électronique", "Circuit ouvert", "Réparer câblage"],
-      ["P0234", "Suralimentation excessive", "high", "Turbo;Suralimentation", "Wastegate bloquée", "Tester actuateur"],
-      ["P0260", "Circuit injecteur cylindre 1 impulsions", "high", "Injection", "Injecteur, câblage", "Tester injecteur"],
-      ["P0270", "Circuit injecteur cylindre 3 impulsions", "high", "Injection", "Injecteur, câblage", "Tester injecteur"],
-      ["P0299", "Suralimentation insuffisante", "high", "Turbo;Suralimentation", "Fuite admission, turbo, capteur", "Test étanchéité, pression"],
-      ["P0300", "Ratés d'allumage aléatoires/multiples", "critical", "Allumage;Injection;Compression", "Bougies, bobines, injecteurs, fuite, compression", "Remplacer bougies, tester bobines/injecteurs, compression"],
-      ["P0301", "Ratés cylindre 1", "critical", "Allumage;Injection;Compression", "Bougie, bobine, injecteur, compression", "Permuter composants"],
-      ["P0302", "Ratés cylindre 2", "critical", "Allumage;Injection;Compression", "Bougie, bobine, injecteur, compression", "Permuter composants"],
-      ["P0303", "Ratés cylindre 3", "critical", "Allumage;Injection;Compression", "Bougie, bobine, injecteur, compression", "Permuter composants"],
-      ["P0304", "Ratés cylindre 4", "critical", "Allumage;Injection;Compression", "Bougie, bobine, injecteur, compression", "Permuter composants"],
-      ["P0325", "Circuit capteur cliquetis", "medium", "Capteurs;Allumage", "Capteur knock HS", "Remplacer capteur"],
-      ["P0326", "Capteur cliquetis plage", "medium", "Capteurs;Allumage", "Capteur dérivé", "Tester signal"],
-      ["P0327", "Capteur cliquetis entrée basse", "medium", "Capteurs;Allumage", "Court-circuit", "Réparer câblage"],
-      ["P0328", "Capteur cliquetis entrée haute", "medium", "Capteurs;Allumage", "Circuit ouvert", "Réparer câblage"],
-      ["P0335", "Circuit capteur vilebrequin CKP", "critical", "Capteurs;Démarrage", "CKP HS, cible, câblage", "Remplacer CKP"],
-      ["P0336", "Circuit CKP plage", "critical", "Capteurs;Démarrage", "CKP dérivé", "Tester signal"],
-      ["P0337", "Circuit CKP entrée basse", "critical", "Capteurs;Démarrage", "Court-circuit", "Réparer faisceau"],
-      ["P0338", "Circuit CKP entrée haute", "critical", "Capteurs;Démarrage", "Circuit ouvert", "Réparer faisceau"],
-      ["P0339", "Circuit CKP
+    "quick_session": [
+      { "label": "Default", "payload": "10 01" },
+      { "label": "Programming", "payload": "10 02" },
+      { "label": "Extended", "payload": "10 03" }
+    ],
+    "quick_dtc_control": [
+      { "label": "DTC off", "payload": "85 01" },
+      { "label": "DTC on", "payload": "85 02" },
+      { "label": "Clear all DTC", "payload": "14 FF FF FF" }
+    ]
+  },
+  "glossary": {
+    "UDS": "Unified Diagnostic Services, norme ISO 14229.",
+    "ISO-TP": "ISO 15765-2, transport de paquets sur CAN.",
+    "DID": "Data Identifier, identifiant de donnée lisible ou inscriptible dans un ECU.",
+    "PID": "Parameter Identifier, paramètre standard OBD-II.",
+    "NRC": "Negative Response Code, code de refus UDS.",
+    "ECU": "Electronic Control Unit, calculateur.",
+    "Security Access": "Mécanisme UDS demandant seed/key pour débloquer certains services.",
+    "Routine Control": "Service UDS permettant de démarrer, arrêter ou interroger une routine de service.",
+    "Readiness Monitor": "état des moniteurs OBD utilisés pour le contrôle anti-pollution.",
+    "Freeze Frame": "instantané des paramètres au moment de la déclaration d'un DTC."
+  }
+}
