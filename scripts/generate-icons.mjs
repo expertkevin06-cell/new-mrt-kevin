@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -47,17 +49,17 @@ function png(width, height, renderPixel) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;  // bit depth
-  ihdr[9] = 6;  // color type RGBA
-  ihdr[10] = 0; // compression
-  ihdr[11] = 0; // filter
-  ihdr[12] = 0; // interlace
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
 
   const raw = Buffer.alloc(height * (1 + width * 4));
   let pos = 0;
 
   for (let y = 0; y < height; y++) {
-    raw[pos++] = 0; // filter none
+    raw[pos++] = 0;
     for (let x = 0; x < width; x++) {
       const px = renderPixel(x, y);
       raw[pos++] = px[0] & 255;
