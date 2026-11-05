@@ -385,5 +385,24 @@ async function boot(){
  const params=new URLSearchParams(location.search);if(params.get('tab'))switchTab(params.get('tab'));
 }
 async function initSecurityBoot(){await localAudit('app_boot',{native:isNative()});if(navigator.onLine){try{await refreshRevocations();}catch(err){console.warn('Revocation refresh failed:',err);}}await checkRevocation();}
+window.DiagAutoElmHost = {
+  ElmManager,
+  elmSend,
+  elmLog,
+  toast,
+  esc,
+  api,
+  getRole,
+  getToken,
+  S,
+  apiUrl,
+  network
+};
+
+window.dispatchEvent(new Event('diagauto:elm-host-ready'));
+
 bindEvents();
-boot().catch(err=>{console.error(err);toast('Erreur démarrage : '+err.message,'error');});
+boot().catch(err => {
+  console.error(err);
+  toast('Erreur démarrage : ' + err.message, 'error');
+});
