@@ -1,12 +1,17 @@
 node_modules
+server/node_modules
 .env
+
 server/data
 public/media
+public/icons/*.png
+
 android
 ios
 *.apk
 *.aab
 *.diagauto
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
