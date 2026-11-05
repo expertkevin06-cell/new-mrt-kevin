@@ -1,0 +1,26 @@
+{
+  "name": "diagauto-pro",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "cap:init": "npx cap init \"DiagAuto Pro\" com.diagauto.pro --web-dir=public",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync android",
+    "apk:debug": "cd android && ./gradlew assembleDebug",
+    "apk:release": "cd android && ./gradlew assembleRelease",
+    "tunnel": "npx --yes cloudflared tunnel --url http://localhost:3000"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor-community/bluetooth-serial": "^6.1.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0"
+  }
+}
