@@ -1,4 +1,4 @@
-const VERSION = 'diagauto-v4.0.0';
+const VERSION = 'diagauto-v4.3.0';
 const CORE_CACHE = `${VERSION}-core`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -29,6 +29,7 @@ self.addEventListener('activate', (event) => {
 
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
+
   try {
     const fresh = await fetch(request);
     if (fresh && fresh.ok) cache.put(request, fresh.clone());
@@ -43,10 +44,15 @@ async function networkFirst(request, cacheName) {
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
+
   if (cached) {
-    fetch(request).then(res => { if (res && res.ok) cache.put(request, res.clone()); }).catch(() => {});
+    fetch(request).then(res => {
+      if (res && res.ok) cache.put(request, res.clone());
+    }).catch(() => {});
+
     return cached;
   }
+
   const fresh = await fetch(request);
   if (fresh && fresh.ok) cache.put(request, fresh.clone());
   return fresh;
@@ -55,20 +61,25 @@ async function cacheFirst(request, cacheName) {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
   const url = new URL(req.url);
 
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(req).catch(() =>
-      new Response(JSON.stringify({ offline: true, error: 'Réseau indisponible' }), {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    ));
+    event.respondWith(
+      fetch(req).catch(() =>
+        new Response(JSON.stringify({ offline: true, error: 'Réseau indisponible' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    );
     return;
   }
 
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirst(req, CORE_CACHE).catch(() => caches.match('/index.html')));
+    event.respondWith(
+      networkFirst(req, CORE_CACHE).catch(() => caches.match('/index.html'))
+    );
     return;
   }
 
@@ -89,24 +100,34 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('push', (event) => {
   let payload = {};
-  try { payload = event.data ? event.data.json() : {}; } catch { payload = { title: 'DiagAuto Pro', body: event.data?.text() || '' }; }
-  event.waitUntil(self.registration.showNotification(payload.title || 'DiagAuto Pro', {
-    body: payload.body || '',
-    icon: payload.icon || '/icons/icon-192.png',
-    badge: payload.badge || '/icons/icon-192.png',
-    tag: payload.tag,
-    renotify: payload.renotify || false,
-    data: payload.data || {},
-    actions: payload.actions || []
-  }));
+
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: 'DiagAuto Pro', body: event.data?.text() || '' };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'DiagAuto Pro', {
+      body: payload.body || '',
+      icon: payload.icon || '/icons/icon-192.png',
+      badge: payload.badge || '/icons/icon-192.png',
+      tag: payload.tag,
+      renotify: payload.renotify || false,
+      data: payload.data || {},
+      actions: payload.actions || []
+    })
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
   const notification = event.notification;
   const action = event.action;
   const data = notification.data || {};
+
   event.waitUntil((async () => {
     notification.close();
+
     if ((action === 'grant' || action === 'deny') && data.requestId && data.actionTokens?.[action]) {
       try {
         await fetch('/api/access/action', {
@@ -114,16 +135,26 @@ self.addEventListener('notificationclick', (event) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ requestId: data.requestId, action, actionToken: data.actionTokens[action] })
         });
+
         const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-        for (const client of clients) client.postMessage({ type: 'ACCESS_UPDATED_FROM_NOTIFICATION', action, requestId: data.requestId });
+        for (const client of clients) {
+          client.postMessage({ type: 'ACCESS_UPDATED_FROM_NOTIFICATION', action, requestId: data.requestId });
+        }
+
         return;
       } catch {}
     }
+
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const targetUrl = data.url || '/';
+
     for (const client of clients) {
-      if ('focus' in client) { client.navigate(targetUrl); return client.focus(); }
+      if ('focus' in client) {
+        client.navigate(targetUrl);
+        return client.focus();
+      }
     }
+
     if (self.clients.openWindow) await self.clients.openWindow(targetUrl);
   })());
 });
