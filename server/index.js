@@ -8,14 +8,6 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
 import webPush from 'web-push';
-import {
-  loadElmProfiles,
-  saveElmProfiles,
-  appendElmLog,
-  getElmLogs,
-  getElmProfileSummary,
-  sanitizeElmProfilesForClient
-} from './elm-uds.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,245 +20,338 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
+fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 
 const PORT = Number(process.env.PORT || 3000);
 const OWNER_CODE = process.env.OWNER_CODE || 'DIAGAUTO-OWNER';
-const IMPORT_INTERVAL_MS = 15 * 24 * 60 * 60 * 1000;
 
 const now = () => Date.now();
 const uid = () => crypto.randomUUID();
-const clone = (v) => JSON.parse(JSON.stringify(v));
+
+const DEFAULT_ELM_PROFILES = {
+  version: '4.3.0',
+  updated_at: 0,
+  legal_notice: 'Base open source d’aide au diagnostic. Les écritures et routines doivent être utilisées uniquement par un professionnel habilité, avec procédures constructeur légales et documentées.',
+  safety: {
+    owner_only_writes: true,
+    require_confirmation_for_dangerous_routines: true,
+    require_owner_for_security_access: true,
+    require_owner_for_dtc_clear: true,
+    require_owner_for_did_write: true,
+    require_owner_for_routine_start: true,
+    forbidden_without_oem_authorization: [
+      'flash_ecu',
+      'security_bypass',
+      'immobilizer_bypass',
+      'odometer_write',
+      'airbag_crash_data_reset_without_procedure',
+      'emission_system_disable',
+      'dpf_delete',
+      'egr_delete',
+      'adblue_disable',
+      'vin_modification'
+    ],
+    warnings: [
+      'Les routines placeholder doivent être remplacées par des IDs OEM documentés.',
+      'Le security access UDS nécessite une clé légitime.',
+      'Airbag, ABS/ESP, HT, direction et dépollution sont critiques.'
+    ]
+  },
+  transport_defaults: {
+    protocol: 6,
+    tx_id: '7E0',
+    rx_id: '7E8',
+    functional_id: '7DF',
+    padding: 'CC',
+    block_size: 0,
+    st_min: 0,
+    timeout_ms: 5000,
+    max_frame_length: 8
+  },
+  nrc: {
+    '0x10': 'General reject',
+    '0x11': 'Service not supported',
+    '0x12': 'Sub-function not supported',
+    '0x13': 'Incorrect message length or invalid format',
+    '0x22': 'Conditions not correct',
+    '0x24': 'Request sequence error',
+    '0x25': 'No key from output device',
+    '0x26': 'Invalid key',
+    '0x27': 'Exceed number of attempts',
+    '0x28': 'Required time delay not expired',
+    '0x31': 'Request out of range',
+    '0x33': 'Security access denied',
+    '0x35': 'Invalid key',
+    '0x36': 'Exceed number of attempts',
+    '0x37': 'Required time delay not expired',
+    '0x70': 'Upload/download not accepted',
+    '0x71': 'Transfer data suspended',
+    '0x73': 'General programming failure',
+    '0x78': 'Request correctly received - response pending'
+  },
+  services: {
+    '0x10': { name: 'DiagnosticSessionControl', write: false },
+    '0x11': { name: 'ECUReset', write: true },
+    '0x14': { name: 'ClearDiagnosticInformation', write: true },
+    '0x19': { name: 'ReadDTCInformation', write: false },
+    '0x22': { name: 'ReadDataByIdentifier', write: false },
+    '0x27': { name: 'SecurityAccess', write: true },
+    '0x28': { name: 'CommunicationControl', write: true },
+    '0x2E': { name: 'WriteDataByIdentifier', write: true },
+    '0x31': { name: 'RoutineControl', write: true },
+    '0x3E': { name: 'TesterPresent', write: false },
+    '0x85': { name: 'ControlDTCSetting', write: true }
+  },
+  standard_dids: {
+    F187: 'Identité véhicule active',
+    F188: 'Identité véhicule inactuelle',
+    F189: 'Identité véhicule de fabrication',
+    F190: 'VIN',
+    F191: 'Numéro de pièce',
+    F192: 'Numéro de pièce système',
+    F193: 'Numéro de calibration système',
+    F194: 'Numéro de logiciel système',
+    F195: 'Numéro de matériel système',
+    F196: 'Numéro de système',
+    F197: 'Repair shop',
+    F198: 'Date de fabrication'
+  },
+  brands: {
+    'BR-RENAULT': { name: 'Renault', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-PEUGEOT': { name: 'Peugeot', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-CITROEN': { name: 'Citroën', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-DS': { name: 'DS Automobiles', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-DACIA': { name: 'Dacia', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-VOLKSWAGEN': { name: 'Volkswagen', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-AUDI': { name: 'Audi', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-SKODA': { name: 'Škoda', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-SEAT': { name: 'SEAT', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-BMW': { name: 'BMW', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-MERCEDES-BENZ': { name: 'Mercedes-Benz', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-PORSCHE': { name: 'Porsche', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-FORD': { name: 'Ford', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-TOYOTA': { name: 'Toyota', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-HONDA': { name: 'Honda', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-NISSAN': { name: 'Nissan', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-HYUNDAI': { name: 'Hyundai', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-KIA': { name: 'Kia', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-VOLVO': { name: 'Volvo', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-TESLA': { name: 'Tesla', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-BYD': { name: 'BYD', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' },
+    'BR-MG': { name: 'MG Motor', protocol: 'CAN', tx_id: '7E0', rx_id: '7E8' }
+  },
+  ecu_groups: [
+    {
+      id: 'ENGINE_GENERIC',
+      name: 'Calculateur moteur générique UDS',
+      category: 'MOTEUR',
+      tx_id: '7E0',
+      rx_id: '7E8',
+      dids: ['F190', 'F191', 'F193', 'F194', 'F195'],
+      variables: [
+        { name: 'Régime moteur', source: 'pid', pid: '010C', unit: 'tr/min', confirmed: true },
+        { name: 'Vitesse véhicule', source: 'pid', pid: '010D', unit: 'km/h', confirmed: true },
+        { name: 'Température liquide', source: 'pid', pid: '0105', unit: '°C', confirmed: true },
+        { name: 'Charge moteur', source: 'pid', pid: '0104', unit: '%', confirmed: true },
+        { name: 'Position papillon', source: 'pid', pid: '0111', unit: '%', confirmed: true },
+        { name: 'Tension système', source: 'pid', pid: '0142', unit: 'V', confirmed: true },
+        { name: 'STFT banque 1', source: 'pid', pid: '0106', unit: '%', confirmed: true },
+        { name: 'LTFT banque 1', source: 'pid', pid: '0107', unit: '%', confirmed: true },
+        { name: 'Pression rail (exemple DID)', source: 'did', did: 'F467', byte_offset: 0, length: 2, scale: 0.1, offset: 0, signed: false, unit: 'bar', confirmed: false }
+      ],
+      routines: [
+        { id: 'THROTTLE_LEARN', name: 'Apprentissage boîtier papillon', service: '31', routine_id: '000000', requires_owner: true, danger: false, placeholder: true, warning: 'Routine OEM requise.' },
+        { id: 'EGR_ADAPTATION', name: 'Adaptation vanne EGR', service: '31', routine_id: '000000', requires_owner: true, danger: false, placeholder: true, warning: 'Routine OEM requise.' },
+        { id: 'DPF_FORCED_REGEN', name: 'Régénération forcée FAP/DPF', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'DANGER : procédure constructeur obligatoire.' }
+      ]
+    },
+    {
+      id: 'TRANSMISSION_GENERIC',
+      name: 'Boîte de vitesses générique UDS',
+      category: 'TRANSMISSION',
+      tx_id: '7E1',
+      rx_id: '7E9',
+      dids: ['F190', 'F191', 'F194', 'F195'],
+      variables: [
+        { name: 'Vitesse véhicule', source: 'pid', pid: '010D', unit: 'km/h', confirmed: true },
+        { name: 'Rapport (exemple DID)', source: 'did', did: 'F469', byte_offset: 0, length: 1, scale: 1, offset: 0, signed: false, unit: '', confirmed: false },
+        { name: 'Température huile BV (exemple DID)', source: 'did', did: 'F46A', byte_offset: 0, length: 1, scale: 1, offset: -40, signed: false, unit: '°C', confirmed: false }
+      ],
+      routines: [
+        { id: 'TCM_RESET_ADAPTATIONS', name: 'Réinitialisation adaptations TCM', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'Routine OEM requise.' },
+        { id: 'CLUTCH_ADAPTATION', name: 'Apprentissage embrayage', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'Routine OEM requise.' }
+      ]
+    },
+    {
+      id: 'ABS_ESP_GENERIC',
+      name: 'ABS / ESP générique UDS',
+      category: 'CHASSIS',
+      tx_id: '7E2',
+      rx_id: '7EA',
+      dids: ['F190', 'F191', 'F194', 'F195'],
+      variables: [
+        { name: 'Angle volant (exemple DID)', source: 'did', did: 'F474', byte_offset: 0, length: 2, scale: 0.1, offset: -3276.8, signed: true, unit: '°', confirmed: false },
+        { name: 'Vitesse roue AVG (exemple DID)', source: 'did', did: 'F470', byte_offset: 0, length: 2, scale: 0.056, offset: 0, signed: false, unit: 'km/h', confirmed: false }
+      ],
+      routines: [
+        { id: 'ABS_PUMP_TEST', name: 'Test pompe ABS', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'Routine OEM requise.' },
+        { id: 'STEERING_ANGLE_ZERO', name: 'Zero angle volant', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'Roues droites obligatoires.' }
+      ]
+    },
+    {
+      id: 'AIRBAG_SRS_GENERIC',
+      name: 'Airbag / SRS générique UDS',
+      category: 'SECURITE',
+      tx_id: '7E3',
+      rx_id: '7EB',
+      dids: ['F190', 'F191', 'F194', 'F195'],
+      variables: [
+        { name: 'Crash data (exemple DID)', source: 'did', did: 'F480', byte_offset: 0, length: 1, scale: 1, offset: 0, signed: false, unit: '', enum: { 0: 'Aucune', 1: 'Présente', 2: 'Lue' }, confirmed: false }
+      ],
+      routines: [
+        { id: 'AIRBAG_CRASH_DATA_READ', name: 'Lecture crash data', service: '31', routine_id: '000000', requires_owner: true, danger: false, placeholder: true, warning: 'Lecture seulement.' },
+        { id: 'AIRBAG_CRASH_DATA_RESET', name: 'Reset crash data', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'DANGER : technicien habilité uniquement.' }
+      ]
+    },
+    {
+      id: 'HV_BATTERY_GENERIC',
+      name: 'Batterie HT / BMS générique UDS',
+      category: 'ELECTRIQUE',
+      tx_id: '7E5',
+      rx_id: '7ED',
+      dids: ['F190', 'F191', 'F194', 'F195'],
+      variables: [
+        { name: 'SOC batterie HT (exemple DID)', source: 'did', did: 'F4A0', byte_offset: 0, length: 1, scale: 0.5, offset: 0, signed: false, unit: '%', confirmed: false },
+        { name: 'SOH batterie HT (exemple DID)', source: 'did', did: 'F4A1', byte_offset: 0, length: 1, scale: 0.5, offset: 0, signed: false, unit: '%', confirmed: false },
+        { name: 'Tension batterie HT (exemple DID)', source: 'did', did: 'F4A2', byte_offset: 0, length: 2, scale: 0.1, offset: 0, signed: false, unit: 'V', confirmed: false },
+        { name: 'Isolement HT (exemple DID)', source: 'did', did: 'F4A5', byte_offset: 0, length: 2, scale: 1, offset: 0, signed: false, unit: 'kΩ/V', confirmed: false }
+      ],
+      routines: [
+        { id: 'INSULATION_TEST', name: 'Test isolement HT', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'DANGER HT : habilitation obligatoire.' },
+        { id: 'BATTERY_BALANCING', name: 'Équilibrage batterie HT', service: '31', routine_id: '000000', requires_owner: true, danger: true, placeholder: true, warning: 'Procédure constructeur obligatoire.' }
+      ]
+    }
+  ]
+};
 
 const BRANDS_RAW = [
-  ['BR-RENAULT','Renault','FR','EUROPE'],['BR-PEUGEOT','Peugeot','FR','EUROPE'],['BR-CITROEN','Citroën','FR','EUROPE'],
-  ['BR-DS','DS Automobiles','FR','EUROPE'],['BR-ALPINE','Alpine','FR','EUROPE'],['BR-BUGATTI','Bugatti','FR','EUROPE'],
-  ['BR-AIXAM','Aixam','FR','EUROPE'],['BR-LIGIER','Ligier','FR','EUROPE'],['BR-MICROCAR','Microcar','FR','EUROPE'],
-  ['BR-VOLKSWAGEN','Volkswagen','DE','EUROPE'],['BR-AUDI','Audi','DE','EUROPE'],['BR-BMW','BMW','DE','EUROPE'],
-  ['BR-MERCEDES-BENZ','Mercedes-Benz','DE','EUROPE'],['BR-PORSCHE','Porsche','DE','EUROPE'],['BR-OPEL','Opel','DE','EUROPE'],
-  ['BR-SMART','Smart','DE','EUROPE'],['BR-MAN','MAN','DE','EUROPE'],['BR-ALPINA','Alpina','DE','EUROPE'],
-  ['BR-FIAT','Fiat','IT','EUROPE'],['BR-FERRARI','Ferrari','IT','EUROPE'],['BR-LAMBORGHINI','Lamborghini','IT','EUROPE'],
-  ['BR-MASERATI','Maserati','IT','EUROPE'],['BR-PAGANI','Pagani','IT','EUROPE'],['BR-ALFA-ROMEO','Alfa Romeo','IT','EUROPE'],
-  ['BR-LANCIA','Lancia','IT','EUROPE'],['BR-IVECO','Iveco','IT','EUROPE'],['BR-SEAT','SEAT','ES','EUROPE'],
-  ['BR-CUPRA','Cupra','ES','EUROPE'],['BR-SKODA','Škoda','CZ','EUROPE'],['BR-DACIA','Dacia','RO','EUROPE'],
-  ['BR-VOLVO','Volvo','SE','EUROPE'],['BR-POLESTAR','Polestar','SE','EUROPE'],['BR-KOENIGSEGG','Koenigsegg','SE','EUROPE'],
-  ['BR-ASTON-MARTIN','Aston Martin','GB','EUROPE'],['BR-MCLAREN','McLaren','GB','EUROPE'],['BR-LOTUS','Lotus','GB','EUROPE'],
-  ['BR-JAGUAR','Jaguar','GB','EUROPE'],['BR-LAND-ROVER','Land Rover','GB','EUROPE'],['BR-MINI','MINI','GB','EUROPE'],
-  ['BR-VAUXHALL','Vauxhall','GB','EUROPE'],['BR-LADA','Lada','RU','EUROPE'],['BR-FORD','Ford','US','AMERIQUE'],
-  ['BR-CHEVROLET','Chevrolet','US','AMERIQUE'],['BR-GMC','GMC','US','AMERIQUE'],['BR-CADILLAC','Cadillac','US','AMERIQUE'],
-  ['BR-LINCOLN','Lincoln','US','AMERIQUE'],['BR-BUICK','Buick','US','AMERIQUE'],['BR-DODGE','Dodge','US','AMERIQUE'],
-  ['BR-CHRYSLER','Chrysler','US','AMERIQUE'],['BR-JEEP','Jeep','US','AMERIQUE'],['BR-RAM','Ram','US','AMERIQUE'],
-  ['BR-TESLA','Tesla','US','AMERIQUE'],['BR-RIVIAN','Rivian','US','AMERIQUE'],['BR-LUCID','Lucid Motors','US','AMERIQUE'],
-  ['BR-TOYOTA','Toyota','JP','ASIE'],['BR-LEXUS','Lexus','JP','ASIE'],['BR-HONDA','Honda','JP','ASIE'],
-  ['BR-ACURA','Acura','JP','ASIE'],['BR-NISSAN','Nissan','JP','ASIE'],['BR-INFINITI','Infiniti','JP','ASIE'],
-  ['BR-MAZDA','Mazda','JP','ASIE'],['BR-SUBARU','Subaru','JP','ASIE'],['BR-MITSUBISHI','Mitsubishi','JP','ASIE'],
-  ['BR-SUZUKI','Suzuki','JP','ASIE'],['BR-DAIHATSU','Daihatsu','JP','ASIE'],['BR-ISUZU','Isuzu','JP','ASIE'],
-  ['BR-HYUNDAI','Hyundai','KR','ASIE'],['BR-KIA','Kia','KR','ASIE'],['BR-GENESIS','Genesis','KR','ASIE'],
-  ['BR-SSANGYONG','SsangYong','KR','ASIE'],['BR-TATA','Tata','IN','ASIE'],['BR-MAHINDRA','Mahindra','IN','ASIE'],
-  ['BR-BYD','BYD','CN','CHINE'],['BR-NIO','NIO','CN','CHINE'],['BR-XPENG','XPeng','CN','CHINE'],
-  ['BR-LI-AUTO','Li Auto','CN','CHINE'],['BR-ZEEKR','Zeekr','CN','CHINE'],['BR-GEELY','Geely','CN','CHINE'],
-  ['BR-CHERY','Chery','CN','CHINE'],['BR-OMODA','Omoda','CN','CHINE'],['BR-JAECCOO','Jaecoo','CN','CHINE'],
-  ['BR-JETOUR','Jetour','CN','CHINE'],['BR-GREAT-WALL','Great Wall Motor','CN','CHINE'],['BR-HAVAL','Haval','CN','CHINE'],
-  ['BR-TANK','Tank','CN','CHINE'],['BR-WEY','Wey','CN','CHINE'],['BR-MG','MG Motor','CN','CHINE'],
-  ['BR-MAXUS','MAXUS','CN','CHINE'],['BR-LEAPMOTOR','Leapmotor','CN','CHINE'],['BR-AVATAR','Avatr','CN','CHINE'],
-  ['BR-DEEPAL','Deepal','CN','CHINE'],['BR-HONGQI','Hongqi','CN','CHINE'],['BR-BAIC','BAIC','CN','CHINE'],
-  ['BR-BEIJING','Beijing Auto','CN','CHINE'],['BR-DONGFENG','Dongfeng','CN','CHINE'],['BR-FOTON','Foton','CN','CHINE'],
-  ['BR-GAC','GAC','CN','CHINE'],['BR-TRUMPCHI','Trumpchi','CN','CHINE'],['BR-LYNK-CO','Lynk & Co','CN','CHINE'],
-  ['BR-SINOTRUK','Sinotruk','CN','CHINE']
+  ['BR-RENAULT', 'Renault', 'FR', 'EUROPE'],
+  ['BR-PEUGEOT', 'Peugeot', 'FR', 'EUROPE'],
+  ['BR-CITROEN', 'Citroën', 'FR', 'EUROPE'],
+  ['BR-DS', 'DS Automobiles', 'FR', 'EUROPE'],
+  ['BR-DACIA', 'Dacia', 'RO', 'EUROPE'],
+  ['BR-VOLKSWAGEN', 'Volkswagen', 'DE', 'EUROPE'],
+  ['BR-AUDI', 'Audi', 'DE', 'EUROPE'],
+  ['BR-SKODA', 'Škoda', 'CZ', 'EUROPE'],
+  ['BR-SEAT', 'SEAT', 'ES', 'EUROPE'],
+  ['BR-BMW', 'BMW', 'DE', 'EUROPE'],
+  ['BR-MERCEDES-BENZ', 'Mercedes-Benz', 'DE', 'EUROPE'],
+  ['BR-PORSCHE', 'Porsche', 'DE', 'EUROPE'],
+  ['BR-FORD', 'Ford', 'US', 'AMERIQUE'],
+  ['BR-CHEVROLET', 'Chevrolet', 'US', 'AMERIQUE'],
+  ['BR-JEEP', 'Jeep', 'US', 'AMERIQUE'],
+  ['BR-TESLA', 'Tesla', 'US', 'AMERIQUE'],
+  ['BR-TOYOTA', 'Toyota', 'JP', 'ASIE'],
+  ['BR-LEXUS', 'Lexus', 'JP', 'ASIE'],
+  ['BR-HONDA', 'Honda', 'JP', 'ASIE'],
+  ['BR-NISSAN', 'Nissan', 'JP', 'ASIE'],
+  ['BR-MAZDA', 'Mazda', 'JP', 'ASIE'],
+  ['BR-SUBARU', 'Subaru', 'JP', 'ASIE'],
+  ['BR-MITSUBISHI', 'Mitsubishi', 'JP', 'ASIE'],
+  ['BR-SUZUKI', 'Suzuki', 'JP', 'ASIE'],
+  ['BR-HYUNDAI', 'Hyundai', 'KR', 'ASIE'],
+  ['BR-KIA', 'Kia', 'KR', 'ASIE'],
+  ['BR-VOLVO', 'Volvo', 'SE', 'EUROPE'],
+  ['BR-BYD', 'BYD', 'CN', 'CHINE'],
+  ['BR-MG', 'MG Motor', 'CN', 'CHINE'],
+  ['BR-GEELY', 'Geely', 'CN', 'CHINE'],
+  ['BR-CHERY', 'Chery', 'CN', 'CHINE'],
+  ['BR-GREAT-WALL', 'Great Wall Motor', 'CN', 'CHINE']
 ];
 
 const MODELS_RAW = {
-  'BR-RENAULT':['Clio','Megane','Scenic','Captur','Arkana','Austral','Rafale','Espace','Talisman','Trafic','Master','Kangoo','Twingo','Zoe','5','4','Express'],
-  'BR-PEUGEOT':['208','2008','308','3008','508','5008','Partner','Expert','Traveller','Rifter','Boxer','e-208','e-2008','e-3008','e-408'],
-  'BR-CITROEN':['C3','C3 Aircross','C4','C4 Cactus','C4 X','C5 Aircross','Berlingo','Jumpy','Jumper','E-C3','E-C4','E-Jumpy'],
-  'BR-DS':['DS 3','DS 4','DS 7','DS 9'],
-  'BR-ALPINE':['A110','A290'],
-  'BR-BUGATTI':['Chiron','Veyron'],
-  'BR-AIXAM':['A510','City G'],
-  'BR-LIGIER':['JS50','Nova'],
-  'BR-MICROCAR':['M.Go'],
-  'BR-VOLKSWAGEN':['Polo','Golf','Passat','Tiguan','Touareg','T-Roc','T-Cross','Taigo','ID.3','ID.4','ID.5','ID.7','Transporter','Crafter','Caddy','Arteon','Up!','Amarok'],
-  'BR-AUDI':['A1','A3','A4','A5','A6','A7','A8','Q2','Q3','Q4 e-tron','Q5','Q6 e-tron','Q7','Q8','e-tron','e-tron GT','TT','RS 6'],
-  'BR-BMW':['Serie 1','Serie 2','Serie 3','Serie 4','Serie 5','Serie 7','X1','X2','X3','X4','X5','X6','X7','i3','i4','i5','i7','iX','M2','M3','M4','M5','Z4'],
-  'BR-MERCEDES-BENZ':['Classe A','Classe B','Classe C','Classe E','Classe S','CLA','CLS','GLA','GLB','GLC','GLE','GLS','EQA','EQB','EQC','EQE','EQS','EQV','Vito','Sprinter','G-Class','AMG GT'],
-  'BR-PORSCHE':['911','718 Cayman','718 Boxster','Macan','Cayenne','Panamera','Taycan'],
-  'BR-OPEL':['Corsa','Astra','Mokka','Crossland','Grandland','Vivaro','Zafira','Frontera'],
-  'BR-SMART':['Fortwo','Forfour','#1','#3'],
-  'BR-MAN':['TGS','TGX','TGM'],
-  'BR-ALPINA':['B3','B4','B5','XB7'],
-  'BR-FIAT':['500','Panda','Tipo','500X','500L','Ducato','Doblo','Freemont'],
-  'BR-FERRARI':['Roma','Portofino','SF90 Stradale','296 GTB','Purosangue'],
-  'BR-LAMBORGHINI':['Huracan','Urus','Revuelto'],
-  'BR-MASERATI':['Ghibli','Levante','MC20','Grecale'],
-  'BR-PAGANI':['Huayra','Utopia'],
-  'BR-ALFA-ROMEO':['Giulia','Stelvio','Tonale','MiTo'],
-  'BR-LANCIA':['Ypsilon','Delta'],
-  'BR-IVECO':['Daily','Eurocargo','S-Way'],
-  'BR-SEAT':['Ibiza','Leon','Ateca','Arona','Tarraco','El Born','Toledo'],
-  'BR-CUPRA':['Formentor','Leon','Born','Tavascan'],
-  'BR-SKODA':['Fabia','Octavia','Superb','Kamiq','Karoq','Kodiaq','Enyaq','Scala'],
-  'BR-DACIA':['Sandero','Duster','Jogger','Spring','Logan'],
-  'BR-VOLVO':['XC40','XC60','XC90','S60','S90','V60','V90','C40','EX30','EX90'],
-  'BR-POLESTAR':['Polestar 2','Polestar 3','Polestar 4'],
-  'BR-KOENIGSEGG':['Gemera','Jesko'],
-  'BR-ASTON-MARTIN':['Vantage','DB12','DBX'],
-  'BR-MCLAREN':['Artura','750S','GT'],
-  'BR-LOTUS':['Emira','Eletre','Emeya'],
-  'BR-JAGUAR':['F-Pace','E-Pace','I-Pace','XF','XE'],
-  'BR-LAND-ROVER':['Defender','Discovery','Range Rover','Range Rover Sport','Range Rover Evoque','Velar'],
-  'BR-MINI':['Cooper','Countryman','Clubman','Aceman','Convertible'],
-  'BR-VAUXHALL':['Corsa','Astra','Mokka','Crossland','Grandland'],
-  'BR-LADA':['Vesta','Largus','Niva'],
-  'BR-FORD':['Fiesta','Focus','Puma','Kuga','Explorer','Mustang Mach-E','Transit','Ranger','Bronco','F-150'],
-  'BR-CHEVROLET':['Spark','Cruze','Malibu','Equinox','Traverse','Tahoe','Suburban','Silverado 1500','Colorado','Bolt EV','Blazer'],
-  'BR-GMC':['Sierra 1500','Yukon','Acadia','Terrain','Hummer EV'],
-  'BR-CADILLAC':['CT4','CT5','Escalade','Lyriq','XT4','XT5','XT6'],
-  'BR-LINCOLN':['Navigator','Aviator','Corsair','Nautilus'],
-  'BR-BUICK':['Enclave','Encore GX','Envista'],
-  'BR-DODGE':['Challenger','Charger','Durango','Grand Caravan','Hornet'],
-  'BR-CHRYSLER':['Pacifica','Voyager'],
-  'BR-JEEP':['Wrangler','Cherokee','Grand Cherokee','Compass','Renegade','Gladiator','Wagoneer'],
-  'BR-RAM':['Ram 1500','Ram 2500','Ram 3500','ProMaster'],
-  'BR-TESLA':['Model 3','Model Y','Model S','Model X','Cybertruck'],
-  'BR-RIVIAN':['R1T','R1S'],
-  'BR-LUCID':['Air','Gravity'],
-  'BR-TOYOTA':['Yaris','Corolla','Camry','Prius','RAV4','C-HR','Hilux','Land Cruiser','GR86','Supra','bZ4X','Aygo X','Proace','HiAce'],
-  'BR-LEXUS':['UX','NX','RX','IS','ES','LS','LC','LM','RZ'],
-  'BR-HONDA':['Civic','Accord','CR-V','HR-V','Jazz','City','Pilot','Passport','Ridgeline','Prologue'],
-  'BR-ACURA':['MDX','RDX','TLX',' Integra'],
-  'BR-NISSAN':['Micra','Juke','Qashqai','X-Trail','Leaf','Ariya','Navara','Patrol','GT-R','Z'],
-  'BR-INFINITI':['Q50','Q60','QX50','QX55','QX60','QX80'],
-  'BR-MAZDA':['Mazda2','Mazda3','Mazda6','CX-3','CX-30','CX-5','CX-60','MX-5'],
-  'BR-SUBARU':['Impreza','Legacy','Outback','Forester','Crosstrek','Solterra','WRX','BRZ'],
-  'BR-MITSUBISHI':['Space Star','ASX','Eclipse Cross','Outlander','L200','Attrage'],
-  'BR-SUZUKI':['Swift','Ignis','Vitara','S-Cross','Jimny','Baleno','Across'],
-  'BR-DAIHATSU':['Rocky','Sirion','Cuore'],
-  'BR-ISUZU':['D-Max','mu-X','N-Series'],
-  'BR-HYUNDAI':['i10','i20','i30','Bayon','Kona','Tucson','Santa Fe','Ioniq 5','Ioniq 6','Ioniq 9','Staria','H-1'],
-  'BR-KIA':['Picanto','Rio','Ceed','Stonic','XCeed','Sportage','Sorento','EV6','EV9','Niro','Carnival','K5'],
-  'BR-GENESIS':['G70','G80','G90','GV60','GV70','GV80'],
-  'BR-SSANGYONG':['Korando','Torres','Rexton'],
-  'BR-TATA':['Tiago','Altroz','Nexon'],
-  'BR-MAHINDRA':['XUV700','Scorpio-N','Thar'],
-  'BR-BYD':['Atto 3','Dolphin','Seal','Han','Tang','Yuan Plus','Seagull'],
-  'BR-NIO':['ET5','ET7','ES6','ES7','ES8','EC6','EC7'],
-  'BR-XPENG':['P7','P5','G6','G9','X9'],
-  'BR-LI-AUTO':['L7','L8','L9','MEGA'],
-  'BR-ZEEKR':['001','009','X'],
-  'BR-GEELY':['Coolray','Emgrand','Monjaro','Galaxy L7'],
-  'BR-CHERY':['Tiggo 4','Tiggo 7','Tiggo 8','Arrizo 8'],
-  'BR-OMODA':['Omoda 5','Omoda 7'],
-  'BR-JAECCOO':['Jaecoo 7','Jaecoo 8'],
-  'BR-JETOUR':['Dashing','T2'],
-  'BR-GREAT-WALL':['Poer','Cannon'],
-  'BR-HAVAL':['H6','Jolion','Dargo'],
-  'BR-TANK':['Tank 300','Tank 500','Tank 700'],
-  'BR-WEY':['80','07'],
-  'BR-MG':['MG3','MG4','MG5','MG ZS','MG HS','Cyberster'],
-  'BR-MAXUS':['eDeliver 3','eDeliver 9','T60','Mifa 9'],
-  'BR-LEAPMOTOR':['T03','C10','C11'],
-  'BR-AVATAR':['11','12'],
-  'BR-DEEPAL':['SL03','S07'],
-  'BR-HONGQI':['E-HS9','HQ9'],
-  'BR-BAIC':['BJ40','EU5'],
-  'BR-BEIJING':['X7','EU5'],
-  'BR-DONGFENG':['Forthing T5','Aeolus','Voyah Free'],
-  'BR-FOTON':['Tunland','View CS2'],
-  'BR-GAC':['Aion Y','Aion S','Empow'],
-  'BR-TRUMPCHI':['GS3','GS4','GS8'],
-  'BR-LYNK-CO':['01','02','03','06','09'],
-  'BR-SINOTRUK':['HOWO TX','HOWO MAX']
+  'BR-RENAULT': ['Clio', 'Megane', 'Captur', 'Scenic', 'Talisman', 'Austral', 'Rafale', 'Trafic', 'Master', 'Zoe', '5', '4'],
+  'BR-PEUGEOT': ['208', '2008', '308', '3008', '508', '5008', 'Partner', 'Expert', 'Boxer', 'e-208', 'e-3008'],
+  'BR-CITROEN': ['C3', 'C3 Aircross', 'C4', 'C5 Aircross', 'Berlingo', 'Jumpy', 'E-C3', 'E-C4'],
+  'BR-DS': ['DS 3', 'DS 4', 'DS 7', 'DS 9'],
+  'BR-DACIA': ['Sandero', 'Duster', 'Jogger', 'Spring', 'Logan'],
+  'BR-VOLKSWAGEN': ['Polo', 'Golf', 'Passat', 'Tiguan', 'Touareg', 'T-Roc', 'ID.3', 'ID.4', 'ID.5', 'Transporter', 'Caddy'],
+  'BR-AUDI': ['A1', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'Q2', 'Q3', 'Q5', 'Q7', 'Q8', 'e-tron'],
+  'BR-SKODA': ['Fabia', 'Octavia', 'Superb', 'Kamiq', 'Karoq', 'Kodiaq', 'Enyaq'],
+  'BR-SEAT': ['Ibiza', 'Leon', 'Ateca', 'Arona', 'Tarraco', 'Born'],
+  'BR-BMW': ['Serie 1', 'Serie 3', 'Serie 5', 'Serie 7', 'X1', 'X3', 'X5', 'X7', 'i4', 'iX', 'M3', 'M5'],
+  'BR-MERCEDES-BENZ': ['Classe A', 'Classe C', 'Classe E', 'Classe S', 'GLA', 'GLC', 'GLE', 'GLS', 'EQA', 'EQE', 'EQS', 'Sprinter'],
+  'BR-PORSCHE': ['911', '718 Cayman', 'Macan', 'Cayenne', 'Panamera', 'Taycan'],
+  'BR-FORD': ['Fiesta', 'Focus', 'Puma', 'Kuga', 'Mustang Mach-E', 'Transit', 'Ranger'],
+  'BR-CHEVROLET': ['Spark', 'Cruze', 'Equinox', 'Traverse', 'Tahoe', 'Silverado 1500', 'Bolt EV'],
+  'BR-JEEP': ['Wrangler', 'Cherokee', 'Grand Cherokee', 'Compass', 'Renegade', 'Gladiator'],
+  'BR-TESLA': ['Model 3', 'Model Y', 'Model S', 'Model X', 'Cybertruck'],
+  'BR-TOYOTA': ['Yaris', 'Corolla', 'Camry', 'Prius', 'RAV4', 'C-HR', 'Hilux', 'Land Cruiser', 'bZ4X'],
+  'BR-LEXUS': ['UX', 'NX', 'RX', 'IS', 'ES', 'LS', 'RZ'],
+  'BR-HONDA': ['Civic', 'Accord', 'CR-V', 'HR-V', 'Jazz', 'Pilot'],
+  'BR-NISSAN': ['Micra', 'Juke', 'Qashqai', 'X-Trail', 'Leaf', 'Ariya', 'Navara'],
+  'BR-MAZDA': ['Mazda2', 'Mazda3', 'Mazda6', 'CX-3', 'CX-30', 'CX-5', 'MX-5'],
+  'BR-SUBARU': ['Impreza', 'Legacy', 'Outback', 'Forester', 'Crosstrek', 'WRX'],
+  'BR-MITSUBISHI': ['Space Star', 'ASX', 'Eclipse Cross', 'Outlander', 'L200'],
+  'BR-SUZUKI': ['Swift', 'Ignis', 'Vitara', 'S-Cross', 'Jimny', 'Baleno'],
+  'BR-HYUNDAI': ['i10', 'i20', 'i30', 'Kona', 'Tucson', 'Santa Fe', 'Ioniq 5', 'Ioniq 6'],
+  'BR-KIA': ['Picanto', 'Rio', 'Ceed', 'Stonic', 'Sportage', 'Sorento', 'EV6', 'EV9', 'Niro'],
+  'BR-VOLVO': ['XC40', 'XC60', 'XC90', 'S60', 'S90', 'V60', 'V90', 'C40', 'EX30', 'EX90'],
+  'BR-BYD': ['Atto 3', 'Dolphin', 'Seal', 'Han', 'Tang', 'Seagull'],
+  'BR-MG': ['MG3', 'MG4', 'MG5', 'MG ZS', 'MG HS', 'Cyberster'],
+  'BR-GEELY': ['Coolray', 'Emgrand', 'Monjaro', 'Galaxy L7'],
+  'BR-CHERY': ['Tiggo 4', 'Tiggo 7', 'Tiggo 8', 'Arrizo 8'],
+  'BR-GREAT-WALL': ['Poer', 'Cannon', 'Haval H6', 'Tank 300']
 };
 
 const ENGINE_TEMPLATES = [
-  ['Essence atmosphérique',1000,75,'ESSENCE'],
-  ['Essence turbocompressé',1500,130,'ESSENCE'],
-  ['Essence performance',2000,220,'ESSENCE'],
-  ['Diesel',1600,115,'DIESEL'],
-  ['Diesel HD',2000,180,'DIESEL'],
-  ['Hybride',1800,140,'HYBRID'],
-  ['Hybride rechargeable',2000,218,'PHEV'],
-  ['Électrique',0,150,'ELECTRIC'],
-  ['Électrique performance',0,300,'ELECTRIC'],
-  ['GPL / Éthanol',1400,90,'GPL'],
-  ['Mild-Hybrid',1500,130,'MILD-HYBRID']
+  ['Essence atmosphérique', 1000, 75, 'ESSENCE'],
+  ['Essence turbocompressé', 1500, 130, 'ESSENCE'],
+  ['Essence performance', 2000, 220, 'ESSENCE'],
+  ['Diesel', 1600, 115, 'DIESEL'],
+  ['Diesel HD', 2000, 180, 'DIESEL'],
+  ['Hybride', 1800, 140, 'HYBRID'],
+  ['Hybride rechargeable', 2000, 218, 'PHEV'],
+  ['Électrique', 0, 150, 'ELECTRIC'],
+  ['Électrique performance', 0, 300, 'ELECTRIC'],
+  ['GPL', 1400, 90, 'GPL'],
+  ['Mild-Hybrid', 1500, 130, 'MILD-HYBRID']
 ];
 
 const DTC_RAW = [
-  ['P0100','Circuit débitmètre d’air (MAF) - Dysfonctionnement','MAF défectueux, filtre encrassé, fuite admission, câblage','Nettoyer/remplacer MAF, vérifier filtre et durites, tester faisceau','medium'],
-  ['P0101','Circuit MAF - Plage hors limites','MAF sale, fuite vide, papillon encrassé','Nettoyer MAF, rechercher fuite, nettoyer papillon','medium'],
-  ['P0102','Circuit MAF - Entrée basse','MAF HS, court-circuit, connecteur oxydé','Remplacer MAF, réparer câblage','medium'],
-  ['P0103','Circuit MAF - Entrée haute','MAF défaillant, circuit ouvert, 5V anormal','Remplacer MAF, vérifier alimentation','medium'],
-  ['P0110','Circuit température air admission (IAT)','Capteur IAT HS, câblage, connecteur','Remplacer IAT, inspecter câblage','low'],
-  ['P0115','Circuit température liquide (ECT)','Capteur ECT HS, niveau bas, câblage','Remplacer ECT, vérifier liquide','high'],
-  ['P0120','Circuit capteur position papillon (TPS)','TPS HS, câblage, papillon usé','Remplacer TPS, réparer faisceau','high'],
-  ['P0125','Température liquide insuffisante pour boucle fermée','Thermostat bloqué ouvert, ECT HS','Remplacer thermostat, vérifier ECT','medium'],
-  ['P0130','Circuit sonde lambda B1S1','Sonde HS, câblage brûlé, fuite échappement','Remplacer sonde, réparer faisceau','medium'],
-  ['P0131','Sonde lambda B1S1 - Signal bas','Fuite admission, injecteur bouché, sonde HS','Rechercher fuite, tester injecteurs','medium'],
-  ['P0132','Sonde lambda B1S1 - Signal haut','Injecteur qui fuit, régulateur HS','Tester injecteurs, vérifier pression','medium'],
-  ['P0133','Sonde lambda B1S1 - Réponse lente','Sonde vieillissante, contamination','Remplacer sonde','low'],
-  ['P0134','Sonde lambda B1S1 - Aucune activité','Sonde HS, câblage coupé','Remplacer sonde, réparer câblage','medium'],
-  ['P0135','Circuit chauffage sonde lambda B1S1','Résistance HS, relais, câblage','Remplacer sonde, tester relais','medium'],
-  ['P0171','Système trop pauvre (Banque 1)','Fuite admission, MAF sale, injecteurs, pompe faible','Test fumigène, nettoyer MAF, tester pression','high'],
-  ['P0172','Système trop riche (Banque 1)','Injecteurs qui fuient, régulateur HS, filtre encrassé','Tester injecteurs, vérifier pression','high'],
-  ['P0174','Système trop pauvre (Banque 2)','Fuite admission B2, MAF sale, injecteurs','Rechercher fuite, nettoyer MAF','high'],
-  ['P0200','Circuit injecteur','Injecteur HS, câblage, driver ECU','Tester injecteur, réparer câblage','high'],
-  ['P0201','Circuit injecteur cylindre 1','Injecteur cyl.1, câblage, connecteur','Permuter injecteur, tester câblage','high'],
-  ['P0300','Ratés d’allumage aléatoires/multiples','Bougies, bobines, injecteurs, fuite, compression, CKP','Remplacer bougies, tester bobines/injecteurs, compression','critical'],
-  ['P0301','Ratés cylindre 1','Bougie, bobine, injecteur ou compression cyl.1','Permuter composants, tester compression','critical'],
-  ['P0302','Ratés cylindre 2','Bougie, bobine, injecteur ou compression cyl.2','Permuter composants, tester compression','critical'],
-  ['P0303','Ratés cylindre 3','Bougie, bobine, injecteur ou compression cyl.3','Permuter composants, tester compression','critical'],
-  ['P0304','Ratés cylindre 4','Bougie, bobine, injecteur ou compression cyl.4','Permuter composants, tester compression','critical'],
-  ['P0325','Circuit capteur cliquetis','Capteur knock HS, câblage, serrage','Remplacer capteur, vérifier câblage','medium'],
-  ['P0335','Circuit capteur vilebrequin (CKP)','Capteur CKP HS, cible, câblage','Remplacer CKP, inspecter cible','critical'],
-  ['P0340','Circuit capteur arbre à cames B1','Capteur CMP HS, câblage, distribution','Remplacer CMP, vérifier distribution','critical'],
-  ['P0350','Circuit bobine d’allumage','Bobine HS, câblage, bougie','Remplacer bobine, tester bougies','high'],
-  ['P0400','Circuit EGR','Vanne EGR bloquée, solénoïde, conduits','Nettoyer/remplacer EGR','medium'],
-  ['P0401','Flux EGR insuffisant','EGR bloquée, conduits encrassés','Nettoyer vanne et conduits','medium'],
-  ['P0420','Efficacité catalyseur sous seuil B1','Catalyseur HS, sonde, fuite, huile','Tester sondes, vérifier fuites','high'],
-  ['P0440','Circuit EVAP','Bouchon, fuite EVAP, vanne purge','Vérifier bouchon, test fumigène','low'],
-  ['P0442','Petite fuite EVAP','Bouchon desserré, durite percée','Serrer/remplacer bouchon','low'],
-  ['P0443','Circuit vanne purge EVAP','Vanne HS, câblage','Remplacer vanne','low'],
-  ['P0446','Circuit ventilation EVAP','Vanne ventilation, canister','Remplacer vanne/canister','low'],
-  ['P0455','Fuite importante EVAP','Bouchon manquant, durite débranchée','Vérifier bouchon, inspecter durites','medium'],
-  ['P0500','Circuit capteur vitesse véhicule','Capteur VSS HS, câblage','Remplacer capteur','medium'],
-  ['P0505','Dysfonctionnement contrôle ralenti','IAC HS, papillon encrassé, fuite','Nettoyer papillon, remplacer IAC','medium'],
-  ['P0507','Ralenti plus élevé que prévu','Fuite admission, IAC bloqué','Rechercher fuite, nettoyer papillon','medium'],
-  ['P0562','Tension système basse','Batterie faible, alternateur, masses','Tester batterie/alternateur, masses','high'],
-  ['P0563','Tension système haute','Régulateur HS, surcharge','Tester régulateur/alternateur','high'],
-  ['P0600','Liaison série ECU','ECU HS, CAN corrompu','Vérifier CAN, reprogrammer ECU','critical'],
-  ['P0601','Checksum mémoire ECU','ECU corrompu, alimentation instable','Reflasher ECU, vérifier batterie','critical'],
-  ['P0606','ECU/PCM processeur interne','ECU HS, surchauffe, humidité','Remplacer ECU','critical'],
-  ['P0700','Circuit commande boîte','TCM, câblage, solénoïdes, huile BV','Vérifier huile BV, tester TCM','critical'],
-  ['P0715','Capteur vitesse entrée turbine BV','Capteur HS, câblage','Remplacer capteur','high'],
-  ['P0720','Capteur vitesse sortie BV','Capteur HS, engrenage','Remplacer capteur','high'],
-  ['P0750','Solénoïde shift A','Solénoïde HS, huile BV','Remplacer solénoïde, vidanger BV','high'],
-  ['P0800','Système boîte transfert','Moteur transfert, capteur, mécanique','Diagnostiquer transfert','high'],
-  ['P2002','FAP/DPF efficacité sous seuil','FAP colmaté, capteur différentiel','Régénération, nettoyer/remplacer FAP','high'],
-  ['P20EE','Réduction SCR efficacité faible','AdBlue, pompe SCR, capteur NOx','Vérifier AdBlue, SCR','high'],
-  ['P2187','Système trop pauvre au ralenti B1','Fuite vide, MAF, injecteurs, pompe','Test fumigène, nettoyer MAF','medium'],
-  ['P2188','Système trop riche au ralenti B1','Injecteurs, pression haute, MAF','Tester injecteurs, régulateur','medium'],
-  ['P2270','Sonde lambda B1S2 bloquée riche','Sonde HS, injecteur, cata','Remplacer sonde','medium'],
-  ['P2271','Sonde lambda B1S2 bloquée pauvre','Sonde HS, fuite','Remplacer sonde','medium'],
-  ['P2400','Circuit contrôle EVAP','Vanne EVAP, câblage, ECU','Tester vanne','low'],
-  ['P2500','Signal alternateur/L bas','Alternateur HS, régulateur','Tester alternateur','high'],
-  ['P2600','Pompe liquide refroidissement ouverte','Pompe électrique HS, relais','Remplacer pompe','high'],
-  ['P2700','Solénoïde transmission A','Solénoïde HS, huile BV','Remplacer solénoïde','high'],
-  ['P2A00','Sonde lambda B1S1 performance','Sonde lente, fuite','Remplacer sonde','medium'],
-  ['P0A00','Convertisseur DC/DC dysfonctionnement','DC/DC HS, fusible HT, câblage HT','Contrôler fusibles HT, tester DC/DC','critical'],
-  ['P0A14','Résistance isolement batterie faible','Fuite HT, humidité, câble HS','Test isolement, séchage, remplacement','critical'],
-  ['P0A15','Tension batterie trop élevée','SurchARGE, BMS, capteur HS','Vérifier BMS, isoler si danger','critical'],
-  ['P0A16','Tension batterie trop basse','Décharge profonde, cellules faibles','Contrôler SOC/SOH, modules','critical'],
-  ['P0A17','Température batterie trop élevée','Refroidissement HS, capteur, surcharge','Vérifier pompe/ventilation batterie','critical'],
-  ['P0A19','Contacteur batterie dysfonctionnement','Contacteur HS, relais, précharge','Tester contacteurs/relais','critical'],
-  ['P0A1A','Refroidissement batterie performance','Pompe HS, liquide bas, capteur débit','Vérifier pompe, niveau, capteurs','high'],
-  ['P0A1C','Équilibrage batterie performance','Cellules déséquilibrées, BMS','Équilibrage forcé, modules','high'],
-  ['P0AA6','Défaut isolement batterie hybride','Fuite HT, humidité, câble','Test isolement, inspection HT','critical'],
-  ['P0C0A','Groupe motopropulseur électrique performance','Moteur électrique, onduleur, capteurs','Diagnostic onduleur/moteur','critical'],
-  ['P0CB0','Onduleur moteur performance','IGBT/MOSFET, capteurs courant, refroidissement','Tester onduleur, refroidissement','critical'],
-  ['U0100','Perte communication ECM/PCM','ECU HS, CAN, alimentation','Vérifier alimentation/masse, CAN','critical'],
-  ['U0121','Perte communication module ABS','ABS HS, CAN, fusible','Tester alimentation ABS, CAN','critical'],
-  ['U0155','Perte communication BCM','BCM HS, CAN, humidité','Vérifier BCM, fusibles, CAN','high'],
-  ['U0401','Donnée invalide reçue ECM/PCM','ECU corrompu, CAN bruité, codage','Relecture CAN, mise à jour logiciel','high']
+  ['P0100', 'Circuit débitmètre d’air (MAF)', 'MAF défectueux, filtre encrassé, fuite admission', 'Nettoyer/remplacer MAF, vérifier durites', 'medium'],
+  ['P0101', 'Circuit MAF plage hors limites', 'MAF sale, fuite vide, papillon encrassé', 'Nettoyer MAF, rechercher fuite', 'medium'],
+  ['P0115', 'Circuit température liquide ECT', 'Capteur ECT HS, câblage', 'Remplacer ECT, vérifier liquide', 'high'],
+  ['P0120', 'Circuit capteur position papillon', 'TPS HS, câblage, papillon usé', 'Remplacer TPS, réparer faisceau', 'high'],
+  ['P0125', 'Température liquide insuffisante boucle fermée', 'Thermostat bloqué ouvert, ECT HS', 'Remplacer thermostat, vérifier ECT', 'medium'],
+  ['P0130', 'Circuit sonde lambda B1S1', 'Sonde HS, câblage, fuite échappement', 'Remplacer sonde, réparer faisceau', 'medium'],
+  ['P0171', 'Système trop pauvre banque 1', 'Fuite admission, MAF sale, injecteurs, pompe faible', 'Test fumigène, nettoyer MAF, tester pression', 'high'],
+  ['P0172', 'Système trop riche banque 1', 'Injecteurs qui fuient, régulateur HS', 'Tester injecteurs, vérifier pression', 'high'],
+  ['P0200', 'Circuit injecteur', 'Injecteur HS, câblage, driver ECU', 'Tester injecteur, réparer câblage', 'high'],
+  ['P0300', 'Ratés d’allumage aléatoires/multiples', 'Bougies, bobines, injecteurs, fuite, compression', 'Remplacer bougies, tester bobines/injecteurs', 'critical'],
+  ['P0301', 'Ratés cylindre 1', 'Bougie, bobine, injecteur ou compression cyl.1', 'Permuter composants, tester compression', 'critical'],
+  ['P0335', 'Circuit capteur vilebrequin CKP', 'Capteur CKP HS, cible, câblage', 'Remplacer CKP, inspecter cible', 'critical'],
+  ['P0340', 'Circuit capteur arbre à cames', 'Capteur CMP HS, câblage, distribution', 'Remplacer CMP, vérifier distribution', 'critical'],
+  ['P0350', 'Circuit bobine d’allumage', 'Bobine HS, câblage, bougie', 'Remplacer bobine, tester bougies', 'high'],
+  ['P0400', 'Circuit EGR', 'Vanne EGR bloquée, solénoïde, conduits', 'Nettoyer/remplacer EGR', 'medium'],
+  ['P0420', 'Efficacité catalyseur sous seuil', 'Catalyseur HS, sonde, fuite', 'Tester sondes, vérifier fuites', 'high'],
+  ['P0440', 'Circuit EVAP', 'Bouchon, fuite EVAP, vanne purge', 'Vérifier bouchon, test fumigène', 'low'],
+  ['P0562', 'Tension système basse', 'Batterie faible, alternateur, masses', 'Tester batterie/alternateur, masses', 'high'],
+  ['P0563', 'Tension système haute', 'Régulateur HS, surcharge', 'Tester régulateur/alternateur', 'high'],
+  ['P0600', 'Liaison série ECU', 'ECU HS, CAN corrompu', 'Vérifier CAN, reprogrammer ECU', 'critical'],
+  ['P0700', 'Circuit commande boîte', 'TCM, câblage, solénoïdes, huile BV', 'Vérifier huile BV, tester TCM', 'critical'],
+  ['P0750', 'Solénoïde shift A', 'Solénoïde HS, huile BV', 'Remplacer solénoïde, vidanger BV', 'high'],
+  ['P2002', 'FAP/DPF efficacité sous seuil', 'FAP colmaté, capteur différentiel', 'Régénération, nettoyer/remplacer FAP', 'high'],
+  ['P20EE', 'Réduction SCR efficacité faible', 'AdBlue, pompe SCR, capteur NOx', 'Vérifier AdBlue, SCR', 'high'],
+  ['P2187', 'Système trop pauvre au ralenti', 'Fuite vide, MAF, injecteurs, pompe', 'Test fumigène, nettoyer MAF', 'medium'],
+  ['P0A00', 'Convertisseur DC/DC dysfonctionnement', 'DC/DC HS, fusible HT, câblage HT', 'Contrôler fusibles HT, tester DC/DC', 'critical'],
+  ['P0A14', 'Résistance isolement batterie faible', 'Fuite HT, humidité, câble HS', 'Test isolement, séchage, remplacement', 'critical'],
+  ['P0A16', 'Tension batterie trop basse', 'Décharge profonde, cellules faibles', 'Contrôler SOC/SOH, modules', 'critical'],
+  ['P0AA6', 'Défaut isolement batterie hybride', 'Fuite HT, humidité, câble', 'Test isolement, inspection HT', 'critical'],
+  ['P0C0A', 'Groupe motopropulseur électrique performance', 'Moteur électrique, onduleur, capteurs', 'Diagnostic onduleur/moteur', 'critical'],
+  ['U0100', 'Perte communication ECM/PCM', 'ECU HS, CAN, alimentation', 'Vérifier alimentation/masse, CAN', 'critical'],
+  ['U0121', 'Perte communication module ABS', 'ABS HS, CAN, fusible', 'Tester alimentation ABS, CAN', 'critical'],
+  ['U0155', 'Perte communication BCM', 'BCM HS, CAN, humidité', 'Vérifier BCM, fusibles, CAN', 'high']
 ];
 
 function slugify(str) {
@@ -281,10 +366,11 @@ function slugify(str) {
 
 function detId(prefix, ...parts) {
   const raw = parts.filter(Boolean).join('|');
-  return `${prefix}-${crypto.createHash('sha1').update(raw).digest('hex').slice(0, 12)}`;
+  const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 12);
+  return `${prefix}-${hash}`;
 }
 
-function buildReference(seedTs) {
+function buildReference(seedTs = now()) {
   const brands = BRANDS_RAW.map(([id, name, country, region]) => ({
     id, name, country, region, logo_url: null, updated_at: seedTs
   }));
@@ -356,92 +442,6 @@ function buildReference(seedTs) {
   return { brands, models, engines, faults };
 }
 
-function defaultElmProfiles() {
-  const ts = now();
-  return {
-    generic_uds: {
-      id: 'generic_uds',
-      name: 'UDS générique',
-      enabled: true,
-      transport: 'elm',
-      requestTemplate: '6A {address} {data}',
-      functionalTemplate: '6A {data}',
-      addresses: {
-        engine: '7E0',
-        transmission: '7E1',
-        abs: '7E2',
-        airbag: '7E3',
-        body: '7E4'
-      },
-      dids: {
-        vin: 'F190',
-        calibration: 'F193',
-        software: 'F194',
-        hardware: 'F195',
-        serial: 'F196',
-        mileage: 'F180'
-      },
-      routines: {
-        read_data: '0x22',
-        write_data: '0x2E',
-        routine_start: '0x3101',
-        routine_stop: '0x3102',
-        routine_results: '0x3103',
-        security_request: '0x2701',
-        security_send: '0x2702',
-        control_dtc_on: '0x8502',
-        control_dtc_off: '0x8501'
-      },
-      updated_at: ts
-    },
-    engine_adaptations: {
-      id: 'engine_adaptations',
-      name: 'Adaptations moteur (templates OEM)',
-      enabled: true,
-      transport: 'elm',
-      requestTemplate: '6A {address} {data}',
-      addresses: { engine: '7E0' },
-      routines: {
-        throttle_learn: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Remplacer XXXXXX par routine constructeur.' },
-        egr_adaptation: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        turbo_actuator_calibration: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        maf_adaptation: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        dpf_forced_regen: { service: '31', sub: '01', id: 'XXXXXX', warning: 'DANGER : procédure constructeur obligatoire.' }
-      },
-      updated_at: ts
-    },
-    transmission_adaptations: {
-      id: 'transmission_adaptations',
-      name: 'Boîtes TIPTRONIC / EAT6 / EAT8 / DSG',
-      enabled: true,
-      transport: 'elm',
-      requestTemplate: '6A {address} {data}',
-      addresses: { transmission: '7E1' },
-      routines: {
-        tcm_reset_adaptations: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        clutch_adaptation: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        valve_body_calibration: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        learn_shift_points: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' }
-      },
-      updated_at: ts
-    },
-    chassis_safety: {
-      id: 'chassis_safety',
-      name: 'ABS / ESP / Airbag',
-      enabled: true,
-      transport: 'elm',
-      requestTemplate: '6A {address} {data}',
-      addresses: { abs: '7E2', airbag: '7E3' },
-      routines: {
-        abs_pump_test: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        steering_angle_zero: { service: '31', sub: '01', id: 'XXXXXX', warning: 'Routine OEM requise.' },
-        airbag_crash_data_reset: { service: '31', sub: '01', id: 'XXXXXX', warning: 'DANGER : uniquement technicien habilité.' }
-      },
-      updated_at: ts
-    }
-  };
-}
-
 function seedDb() {
   const ts = now();
   const reference = buildReference(ts);
@@ -454,10 +454,9 @@ function seedDb() {
 
   return {
     meta: {
-      app_version: '4.0.0',
+      app_version: '4.3.0',
       data_version: 1,
       last_data_update: ts,
-      last_import_at: ts,
       jwt_secret: crypto.randomBytes(48).toString('hex'),
       vapid
     },
@@ -485,7 +484,7 @@ function seedDb() {
     audit: [],
     reference,
     workshop: {},
-    elm_profiles: defaultElmProfiles(),
+    elm_profiles: DEFAULT_ELM_PROFILES,
     elm_logs: []
   };
 }
@@ -493,31 +492,90 @@ function seedDb() {
 let db = null;
 let saveTimer = null;
 
-function loadDbSync() {
+function saveDbSync() {
+  if (!db) return;
+  const tmp = `${DB_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.renameSync(tmp, DB_FILE);
+}
+
+function saveDb() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDbSync, 300);
+}
+
+function loadDb() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      if (!parsed.elm_profiles) parsed.elm_profiles = defaultElmProfiles();
-      if (!parsed.settings?.background) parsed.settings.background = seedDb().settings.background;
-      if (!parsed.security) parsed.security = seedDb().security;
+
+      parsed.meta = parsed.meta || {};
+      parsed.security = parsed.security || seedDb().security;
+      parsed.settings = parsed.settings || {};
+      parsed.settings.background = parsed.settings.background || seedDb().settings.background;
+      parsed.devices = parsed.devices || {};
+      parsed.access_requests = parsed.access_requests || {};
+      parsed.push_subscriptions = parsed.push_subscriptions || {};
+      parsed.audit = Array.isArray(parsed.audit) ? parsed.audit : [];
+      parsed.workshop = parsed.workshop || {};
+      parsed.elm_logs = Array.isArray(parsed.elm_logs) ? parsed.elm_logs : [];
+
+      if (!parsed.meta.jwt_secret) parsed.meta.jwt_secret = crypto.randomBytes(48).toString('hex');
+      if (!parsed.meta.vapid) parsed.meta.vapid = webPush.generateVAPIDKeys();
+      if (!parsed.meta.app_version) parsed.meta.app_version = '4.3.0';
+      if (!parsed.meta.data_version) parsed.meta.data_version = 1;
+
+      if (!parsed.reference || !Array.isArray(parsed.reference.brands) || !parsed.reference.brands.length) {
+        parsed.reference = buildReference();
+      }
+
+      if (!parsed.elm_profiles || !Array.isArray(parsed.elm_profiles.ecu_groups)) {
+        parsed.elm_profiles = DEFAULT_ELM_PROFILES;
+      }
+
+      const externalProfilesPath = path.join(__dirname, 'elm-profiles.json');
+      if (fs.existsSync(externalProfilesPath)) {
+        try {
+          const external = JSON.parse(fs.readFileSync(externalProfilesPath, 'utf8'));
+          if (external && Array.isArray(external.ecu_groups)) {
+            parsed.elm_profiles = external;
+          }
+        } catch (err) {
+          console.warn('⚠️ server/elm-profiles.json ignoré :', err.message);
+        }
+      }
+
       return parsed;
     }
   } catch (err) {
-    console.error('DB corrompue, reseed:', err);
+    console.error('❌ DB corrompue, reseed :', err.message);
+    try {
+      fs.renameSync(DB_FILE, `${DB_FILE}.corrupt-${Date.now()}`);
+    } catch {}
   }
+
   const seeded = seedDb();
   fs.writeFileSync(DB_FILE, JSON.stringify(seeded, null, 2));
   return seeded;
 }
 
-function saveDb() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const tmp = `${DB_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-    fs.renameSync(tmp, DB_FILE);
-  }, 300);
-}
+db = loadDb();
+
+process.on('exit', saveDbSync);
+process.on('SIGINT', () => {
+  saveDbSync();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  saveDbSync();
+  process.exit(0);
+});
+
+webPush.setVapidDetails(
+  process.env.VAPID_SUBJECT || 'mailto:admin@diagauto.local',
+  db.meta.vapid.publicKey,
+  db.meta.vapid.privateKey
+);
 
 function bumpDataVersion() {
   db.meta.data_version = Number(db.meta.data_version || 1) + 1;
@@ -533,14 +591,6 @@ function logAudit({ deviceId = null, actor = 'system', action, details = null })
   saveDb();
   return rec;
 }
-
-db = loadDbSync();
-
-webPush.setVapidDetails(
-  process.env.VAPID_SUBJECT || 'mailto:admin@diagauto.local',
-  db.meta.vapid.publicKey,
-  db.meta.vapid.privateKey
-);
 
 function signToken(payload, expiresIn = '180d') {
   return jwt.sign(payload, db.meta.jwt_secret, { expiresIn });
@@ -572,17 +622,26 @@ function auth(required = true, roles = null) {
   return (req, res, next) => {
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+
     if (!token) {
       if (required) return res.status(401).json({ error: 'Authentication required' });
       return next();
     }
+
     try {
       const decoded = verifyToken(token);
-      if (roles && !roles.includes(decoded.role)) return res.status(403).json({ error: 'Role not allowed' });
+
+      if (roles && !roles.includes(decoded.role)) {
+        return res.status(403).json({ error: 'Role not allowed' });
+      }
+
       if (decoded.role === 'guest') {
         const device = db.devices[decoded.deviceId];
-        if (!device || device.status !== 'granted') return res.status(403).json({ error: 'Access revoked or not granted' });
+        if (!device || device.status !== 'granted') {
+          return res.status(403).json({ error: 'Access revoked or not granted' });
+        }
       }
+
       req.auth = decoded;
       next();
     } catch {
@@ -598,8 +657,9 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(cors());
-app.use(express.json({ limit: '120mb' }));
-app.use(express.static(PUBLIC_DIR, { index: false }));
+app.use(express.json({ limit: '200mb' }));
+app.use('/media', express.static(MEDIA_DIR));
+app.use(express.static(PUBLIC_DIR, { index: 'index.html', extensions: ['html'] }));
 
 const wsClients = new Map();
 
@@ -655,6 +715,7 @@ async function sendPush(subscriptions, payload) {
 async function notifyAccessRequest(request) {
   const grantToken = signActionToken(request.id, 'grant');
   const denyToken = signActionToken(request.id, 'deny');
+
   await sendPush(getSubscriptions('owner'), {
     title: `Demande d'accès de ${request.requester_name}`,
     body: 'Accepter ou refuser en direct.',
@@ -668,7 +729,7 @@ async function notifyAccessRequest(request) {
       deviceId: request.device_id,
       requesterName: request.requester_name,
       actionTokens: { grant: grantToken, deny: denyToken },
-      url: `/?access=${request.id}`
+      url: '/?tab=access'
     },
     actions: [
       { action: 'grant', title: '✅ Accepter' },
@@ -712,74 +773,6 @@ function buildRevocationPayload() {
   };
 }
 
-function upsertReferenceItem(collection, item) {
-  const arr = db.reference[collection];
-  const idx = arr.findIndex(x => x.id === item.id);
-  if (idx >= 0) arr[idx] = { ...arr[idx], ...item, updated_at: now() };
-  else arr.push({ ...item, updated_at: now() });
-}
-
-async function fetchJson(url, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json', 'User-Agent': 'DiagAutoPro/4.0' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function importNhtsaPopular() {
-  try {
-    console.log('🌐 Import NHTSA populaire démarré...');
-    const makes = (await fetchJson('https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json')).Results || [];
-    const popular = ['Toyota','Honda','Ford','Chevrolet','BMW','Mercedes-Benz','Audi','Volkswagen','Nissan','Hyundai','Kia','Jeep','Tesla','Subaru','Mazda','Lexus','Porsche','Volvo','Mini','Land Rover','Jaguar','Mitsubishi'];
-    const makeMap = new Map(makes.map(m => [m.MakeName, m]));
-
-    for (const makeName of popular) {
-      const make = makeMap.get(makeName);
-      if (!make) continue;
-      const brandId = `BR-NHTSA-${make.MakeId}`;
-      upsertReferenceItem('brands', { id: brandId, name: make.MakeName, country: 'US', region: 'AMERIQUE', logo_url: null });
-
-      const models = (await fetchJson(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(makeName)}?format=json`)).Results || [];
-      for (const model of models.slice(0, 120)) {
-        const modelId = `MD-NHTSA-${model.Model_ID || slugify(model.Model_Name)}`;
-        upsertReferenceItem('models', {
-          id: modelId,
-          brand_id: brandId,
-          name: model.Model_Name,
-          years: `${model.StartYear || 1996}-${model.EndYear || 2026}`
-        });
-        for (const [type, cc, hp, fuel] of ENGINE_TEMPLATES) {
-          upsertReferenceItem('engines', {
-            id: detId('ENG', modelId, type, hp, fuel),
-            model_id: modelId,
-            type,
-            displacement_cc: cc,
-            power_hp: hp,
-            fuel
-          });
-        }
-      }
-      await new Promise(r => setTimeout(r, 120));
-    }
-
-    db.meta.last_import_at = now();
-    bumpDataVersion();
-    console.log('✅ Import NHTSA terminé');
-  } catch (err) {
-    console.warn('⚠️ Import NHTSA ignoré:', err.message);
-  }
-}
-
-setInterval(() => {
-  const last = Number(db.meta.last_import_at || 0);
-  if (now() - last > IMPORT_INTERVAL_MS) importNhtsaPopular();
-}, 60 * 60 * 1000);
-
 app.get('/api/health', (req, res) => res.json({ ok: true, time: now() }));
 
 app.get('/api/version', (req, res) => {
@@ -821,6 +814,7 @@ app.post('/api/settings/background', requireOwner, (req, res) => {
     if (dataUrl && typeof dataUrl === 'string') {
       const match = dataUrl.match(/^data:([a-zA-Z0-9/+.-]+);base64,(.+)$/);
       if (!match) throw new Error('Data URL invalide');
+
       const mime = match[1];
       const base64 = match[2];
       const allowed = {
@@ -830,11 +824,15 @@ app.post('/api/settings/background', requireOwner, (req, res) => {
         'video/mp4': 'mp4',
         'video/webm': 'webm'
       };
+
       if (!allowed[mime]) throw new Error('Type non autorisé');
+
       const buffer = Buffer.from(base64, 'base64');
       if (buffer.length > 100 * 1024 * 1024) throw new Error('Fichier trop lourd (max 100 Mo)');
+
       const filename = `bg-${now()}.${allowed[mime]}`;
       fs.writeFileSync(path.join(MEDIA_DIR, filename), buffer);
+
       bg.type = mime.startsWith('image/') ? 'image' : 'video';
       bg.url = `/media/${filename}`;
       bg.enabled = true;
@@ -845,7 +843,14 @@ app.post('/api/settings/background', requireOwner, (req, res) => {
 
     bg.updated_at = now();
     saveDb();
-    logAudit({ deviceId: req.auth.deviceId, actor: 'owner', action: 'background_updated', details: { url: bg.url, enabled: bg.enabled } });
+
+    logAudit({
+      deviceId: req.auth.deviceId,
+      actor: 'owner',
+      action: 'background_updated',
+      details: { url: bg.url, enabled: bg.enabled }
+    });
+
     res.json({ success: true, background: ownerBackground() });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -855,6 +860,7 @@ app.post('/api/settings/background', requireOwner, (req, res) => {
 app.post('/api/auth/owner', (req, res) => {
   const { code } = req.body || {};
   if (code !== OWNER_CODE) return res.status(401).json({ error: 'Code propriétaire invalide' });
+
   logAudit({ deviceId: 'owner', actor: 'owner', action: 'owner_login', details: { ok: true } });
   res.json({ token: signOwnerToken(), role: 'owner', name: 'Propriétaire' });
 });
@@ -868,6 +874,7 @@ app.post('/api/push/subscribe', (req, res) => {
   if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
     return res.status(400).json({ error: 'Subscription invalide' });
   }
+
   const id = uid();
   db.push_subscriptions[id] = {
     id,
@@ -878,6 +885,7 @@ app.post('/api/push/subscribe', (req, res) => {
     role: role || 'guest',
     created_at: now()
   };
+
   saveDb();
   res.json({ success: true });
 });
@@ -885,6 +893,7 @@ app.post('/api/push/subscribe', (req, res) => {
 app.post('/api/devices/register', (req, res) => {
   const { deviceId, name, role } = req.body || {};
   if (!deviceId) return res.status(400).json({ error: 'deviceId requis' });
+
   const ts = now();
   db.devices[deviceId] = {
     id: deviceId,
@@ -894,6 +903,7 @@ app.post('/api/devices/register', (req, res) => {
     created_at: db.devices[deviceId]?.created_at || ts,
     updated_at: ts
   };
+
   saveDb();
   res.json({ success: true, deviceId });
 });
@@ -901,6 +911,7 @@ app.post('/api/devices/register', (req, res) => {
 app.post('/api/access/request', async (req, res) => {
   const { deviceId, requesterName, role } = req.body || {};
   if (!deviceId || !requesterName) return res.status(400).json({ error: 'deviceId et requesterName requis' });
+
   const ts = now();
   const requestId = uid();
   const deviceRole = role || 'guest';
@@ -939,24 +950,28 @@ app.get('/api/access/list', requireOwner, (req, res) => {
     .map(r => ({ ...r, device_status: db.devices[r.device_id]?.status || 'unknown' }))
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 200);
+
   res.json(rows);
 });
 
 app.get('/api/access/status', (req, res) => {
   const deviceId = req.query.deviceId;
   if (!deviceId) return res.status(400).json({ error: 'deviceId requis' });
+
   const device = db.devices[deviceId];
   if (!device) return res.json({ status: 'unknown' });
+
   const response = { status: device.status, name: device.name, role: device.role };
   if (device.status === 'granted') response.token = signGuestToken(deviceId, device.role || 'guest');
+
   res.json(response);
 });
 
 async function updateAccessStatus(requestId, status, actor = 'owner') {
   const request = db.access_requests[requestId];
   if (!request) throw new Error('Demande introuvable');
-  const ts = now();
 
+  const ts = now();
   request.status = status;
   request.updated_at = ts;
   db.access_requests[requestId] = request;
@@ -967,13 +982,21 @@ async function updateAccessStatus(requestId, status, actor = 'owner') {
   }
 
   saveDb();
-  logAudit({ deviceId: request.device_id, actor, action: `access_${status}`, details: { requestId, requesterName: request.requester_name } });
+
+  logAudit({
+    deviceId: request.device_id,
+    actor,
+    action: `access_${status}`,
+    details: { requestId, requesterName: request.requester_name }
+  });
+
   wsBroadcast({ type: 'ACCESS_UPDATED', payload: request });
 
   if (status === 'granted') {
     const token = signGuestToken(request.device_id, request.role || 'guest');
     wsBroadcast({ type: 'ACCESS_GRANTED', deviceId: request.device_id, token }, request.device_id);
-    await notifyAccessGranted(request.device_id, token, request.requester_name).catch(err => console.warn('Push guest échoué:', err.message));
+    await notifyAccessGranted(request.device_id, token, request.requester_name)
+      .catch(err => console.warn('Push guest échoué:', err.message));
   }
 
   if (status === 'revoked') {
@@ -991,6 +1014,7 @@ async function updateAccessStatus(requestId, status, actor = 'owner') {
 app.post('/api/access/update', requireOwner, async (req, res) => {
   const { requestId, status } = req.body || {};
   if (!['granted', 'denied', 'revoked'].includes(status)) return res.status(400).json({ error: 'Statut invalide' });
+
   try {
     const updated = await updateAccessStatus(requestId, status, req.auth.deviceId || 'owner');
     res.json({ success: true, request: updated });
@@ -1002,12 +1026,17 @@ app.post('/api/access/update', requireOwner, async (req, res) => {
 app.post('/api/access/action', async (req, res) => {
   const { requestId, action, actionToken } = req.body || {};
   if (!requestId || !action || !actionToken) return res.status(400).json({ error: 'Paramètres manquants' });
+
   try {
     const decoded = verifyActionToken(actionToken);
-    if (decoded.requestId !== requestId || decoded.action !== action) return res.status(403).json({ error: 'Action token invalide' });
+    if (decoded.requestId !== requestId || decoded.action !== action) {
+      return res.status(403).json({ error: 'Action token invalide' });
+    }
+
     const statusMap = { grant: 'granted', deny: 'denied', revoke: 'revoked' };
     const status = statusMap[action];
     if (!status) return res.status(400).json({ error: 'Action inconnue' });
+
     const updated = await updateAccessStatus(requestId, status, 'notification');
     res.json({ success: true, request: updated });
   } catch {
@@ -1040,33 +1069,27 @@ app.get('/api/security/audit', requireOwner, (req, res) => {
   res.json(db.audit.slice(0, limit));
 });
 
-app.get('/api/sync/delta', auth(true), (req, res) => {
-  const since = Number(req.query.since || 0);
-  const filter = (arr) => arr.filter(x => Number(x.updated_at || 0) > since);
-  res.json({
-    since,
-    serverVersion: Number(db.meta.data_version || 1),
-    brands: filter(db.reference.brands),
-    models: filter(db.reference.models),
-    engines: filter(db.reference.engines),
-    faults: filter(db.reference.faults)
-  });
-});
-
 app.get('/api/workshop/delta', auth(true), (req, res) => {
   const since = Number(req.query.since || 0);
-  const records = Object.values(db.workshop || {}).filter(r => Number(r.updated_at || 0) > since).sort((a,b)=>a.updated_at-b.updated_at);
+  const records = Object.values(db.workshop || {})
+    .filter(r => Number(r.updated_at || 0) > since)
+    .sort((a, b) => a.updated_at - b.updated_at);
+
   res.json({ since, server_time: now(), records });
 });
 
 app.post('/api/workshop/push', auth(true), (req, res) => {
   const { records } = req.body || {};
   if (!Array.isArray(records)) return res.status(400).json({ error: 'records[] requis' });
+
   let applied = 0;
+
   for (const rec of records) {
-    if (!rec?.id || !['vehicle','intervention'].includes(rec.type)) continue;
+    if (!rec?.id || !['vehicle', 'intervention'].includes(rec.type)) continue;
+
     const existing = db.workshop[rec.id];
     const updatedAt = Number(rec.updated_at || now());
+
     if (!existing || updatedAt >= Number(existing.updated_at || 0)) {
       db.workshop[rec.id] = {
         id: rec.id,
@@ -1080,95 +1103,120 @@ app.post('/api/workshop/push', auth(true), (req, res) => {
       applied++;
     }
   }
+
   saveDb();
-  logAudit({ deviceId: req.auth.deviceId, actor: req.auth.role, action: 'workshop_push', details: { applied } });
+
+  logAudit({
+    deviceId: req.auth.deviceId,
+    actor: req.auth.role,
+    action: 'workshop_push',
+    details: { applied }
+  });
+
   res.json({ success: true, applied, server_time: now() });
 });
 
-app.get('/api/elm/profiles', auth(true), (req, res) => {
-  try {
-    const profiles = sanitizeElmProfilesForClient(loadElmProfiles());
-    res.json(profiles);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/elm/summary', auth(true), (req, res) => {
-  try {
-    res.json(getElmProfileSummary());
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+app.get('/api/elm/profiles', (req, res) => {
+  res.json(db.elm_profiles || DEFAULT_ELM_PROFILES);
 });
 
 app.post('/api/elm/profiles', requireOwner, (req, res) => {
   try {
-    const saved = saveElmProfiles(req.body || {});
+    const profiles = req.body || {};
+    if (typeof profiles !== 'object' || Array.isArray(profiles)) {
+      return res.status(400).json({ error: 'Objet de profils attendu' });
+    }
+
+    if (!Array.isArray(profiles.ecu_groups)) {
+      return res.status(400).json({ error: 'profils.ecu_groups[] requis' });
+    }
+
+    db.elm_profiles = {
+      ...DEFAULT_ELM_PROFILES,
+      ...profiles,
+      updated_at: now()
+    };
+
+    saveDb();
+
     logAudit({
       deviceId: req.auth.deviceId,
       actor: 'owner',
       action: 'elm_profiles_updated',
-      details: { version: saved.version, ecu_groups: saved.ecu_groups?.length || 0 }
+      details: { version: db.elm_profiles.version, ecu_groups: db.elm_profiles.ecu_groups.length }
     });
-    res.json({ success: true, profiles: sanitizeElmProfilesForClient(saved) });
+
+    res.json({ success: true, profiles: db.elm_profiles });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 app.post('/api/elm/log', auth(true), (req, res) => {
-  try {
-    const { action, command, response, ok, meta } = req.body || {};
-    const record = appendElmLog({
-      deviceId: req.auth.deviceId,
-      actor: req.auth.role,
-      action: action || 'elm_command',
-      command,
-      response,
-      ok,
-      meta
-    });
+  const { action, command, response, ok, meta } = req.body || {};
 
-    logAudit({
-      deviceId: req.auth.deviceId,
-      actor: req.auth.role,
-      action: 'elm_log',
-      details: { logAction: record.action, ok: record.ok }
-    });
+  const rec = {
+    id: uid(),
+    ts: now(),
+    deviceId: req.auth.deviceId,
+    actor: req.auth.role,
+    action: action || 'elm_command',
+    command: String(command || '').slice(0, 1000),
+    response: String(response || '').slice(0, 4000),
+    ok: ok !== false,
+    meta: meta || null
+  };
 
-    res.json({ success: true, log: record });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  db.elm_logs.unshift(rec);
+  db.elm_logs = db.elm_logs.slice(0, 1000);
+  saveDb();
+
+  res.json({ success: true, log: rec });
 });
 
 app.get('/api/elm/logs', requireOwner, (req, res) => {
-  try {
-    const limit = Math.min(Number(req.query.limit || 200), 2000);
-    res.json(getElmLogs(limit));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const limit = Math.min(Number(req.query.limit || 200), 1000);
+  res.json(db.elm_logs.slice(0, limit));
 });
-app.post('/api/import/trigger', requireOwner, async (req, res) => {
+
+app.post('/api/import/trigger', requireOwner, (req, res) => {
   try {
-    logAudit({ deviceId: req.auth.deviceId, actor: 'owner', action: 'import_trigger' });
-    await importNhtsaPopular();
-    res.json({ success: true, version: db.meta.data_version });
+    db.reference = buildReference();
+    const version = bumpDataVersion();
+
+    logAudit({
+      deviceId: req.auth.deviceId,
+      actor: 'owner',
+      action: 'import_trigger',
+      details: { version }
+    });
+
+    res.json({ success: true, version });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get(/^(?!\/api|\/media).*/, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/media')) {
+    const indexPath = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  }
+  next();
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.originalUrl });
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 DiagAuto Pro 4.0 : http://localhost:${PORT}`);
+  console.log(`🚀 DiagAuto Pro 4.3.0 : http://localhost:${PORT}`);
   console.log(`🔑 Code propriétaire : ${OWNER_CODE}`);
-  if (Number(db.meta.last_import_at || 0) === 0 || now() - Number(db.meta.last_import_at) > IMPORT_INTERVAL_MS) {
-    importNhtsaPopular();
+
+  const requiredPublic = ['index.html', 'app.js', 'styles.css', 'sw.js', 'manifest.webmanifest'];
+  for (const file of requiredPublic) {
+    if (!fs.existsSync(path.join(PUBLIC_DIR, file))) {
+      console.warn(`⚠️ Fichier public manquant : public/${file}`);
+    }
   }
 });
